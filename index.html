@@ -683,7 +683,7 @@
   function renderRecordTable() { const node=$('recordsTable');node.innerHTML=tableHtml(filteredRecords);bindTable(node); }
   function renderRecent() { const node=$('recentTable');node.innerHTML=tableHtml(filteredRecords,true);bindTable(node); }
   function renderAll() {
-    filteredRecords=filteredRecords||[]; summaryStats(); renderCharts(); renderRecent(); renderRecordTable(); mapNeedsRender=true;
+    filteredRecords=filteredRecords||[]; summaryStats(); renderCharts(); renderRecent(); renderRecordTable();
     if($('view-map').classList.contains('active'))renderMap();
   }
   function showDetails(r) {
