@@ -290,6 +290,9 @@
   let mapCanvas = null, mapCanvasCtx = null, mapCanvasRaf = 0;
   let mapCanvasPoints = [];
   let mapHitBuckets = new Map();
+  // Coordinate bins let the renderer inspect only records near the current viewport.
+  let occurrenceSpatialIndex = { modern: new Map(), paleo: new Map() };
+  const SPATIAL_CELL_DEGREES = 1;
   let activeSearchController = null;
   let mapMoveTimer = null;
   let hasActiveQuery = false;
@@ -454,8 +457,53 @@
   function mapRecordKey(record) {
     return occurrenceKey(record) || `${getTaxon(record)}|${getLat(record)}|${getLng(record)}|${getAge(record)}`;
   }
+  function buildOccurrenceSpatialIndex(incoming) {
+    const index={modern:new Map(),paleo:new Map()};
+    const add=(mode,record,lat,lng)=>{
+      if(lat===null || lng===null || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat)>90 || Math.abs(lng)>360) return;
+      lng=normalizeLongitude(lng);
+      const key=`${Math.floor(lat/SPATIAL_CELL_DEGREES)}:${Math.floor(lng/SPATIAL_CELL_DEGREES)}`;
+      if(!index[mode].has(key)) index[mode].set(key,[]);
+      index[mode].get(key).push({record,lat,lng});
+    };
+    for(const record of incoming) {
+      add('modern',record,getLat(record),getLng(record));
+      add('paleo',record,getLat(record,true),getLng(record,true));
+    }
+    occurrenceSpatialIndex=index;
+  }
+  function queryOccurrenceSpatialIndex(bounds,paleo=false) {
+    const index=occurrenceSpatialIndex[paleo?'paleo':'modern'];
+    const candidates=[];
+    const seen=new Set();
+    const minLat=Math.floor(bounds.south/SPATIAL_CELL_DEGREES);
+    const maxLat=Math.floor(bounds.north/SPATIAL_CELL_DEGREES);
+    const lonSegments=longitudeSegments(bounds.west,bounds.east);
+    for(const [west,east] of lonSegments) {
+      const minLng=Math.floor(west/SPATIAL_CELL_DEGREES);
+      const maxLng=Math.floor(east/SPATIAL_CELL_DEGREES);
+      for(let latCell=minLat;latCell<=maxLat;latCell++) {
+        for(let lngCell=minLng;lngCell<=maxLng;lngCell++) {
+          const bucket=index.get(`${latCell}:${lngCell}`);
+          if(!bucket) continue;
+          for(const entry of bucket) {
+            if(seen.has(entry.record)) continue;
+            seen.add(entry.record);
+            if(boundsContainCoordinate(bounds,entry.lat,entry.lng)) candidates.push(entry);
+          }
+        }
+      }
+    }
+    return candidates;
+  }
+  function boundsContainCoordinate(bounds,lat,lng) {
+    const normalized=normalizeLongitude(lng);
+    const inLongitude=bounds.west<=bounds.east ? normalized>=bounds.west && normalized<=bounds.east : normalized>=bounds.west || normalized<=bounds.east;
+    return lat>=bounds.south && lat<=bounds.north && inLongitude;
+  }
   function setLoadedRecords(incoming, note='') {
     records=incoming;
+    buildOccurrenceSpatialIndex(incoming);
     filteredRecords=incoming.slice();
     currentPage=1;
     renderAll();
@@ -769,7 +817,7 @@
     mapCanvasPoints=[];
     mapHitBuckets=new Map();
     const visibleBounds=map.getBounds();
-    const recordsToPaint=filteredRecords||[];
+    const recordsToPaint=queryOccurrenceSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='paleo');
     const searchHighlightActive=mapSearchMatchedKeys instanceof Set;
     const cellSize=getClusterCellSize(map.getZoom());
     const grouped=new Map();
@@ -778,11 +826,10 @@
 
     // Group occurrences by nearby screen positions. Every count represents
     // the exact number of PBDB occurrence records inside that square.
-    for(const record of recordsToPaint) {
-      const lat=getLat(record,mapMode==='paleo');
-      const lng=getLng(record,mapMode==='paleo');
-      if(lat===null || lng===null || Math.abs(lat)>90 || Math.abs(lng)>360) continue;
-      if(!visibleBounds.contains([lat,lng])) continue;
+    for(const entry of recordsToPaint) {
+      const record=entry.record;
+      const lat=entry.lat;
+      const lng=entry.lng;
       const pixel=map.latLngToContainerPoint([lat,lng]);
       if(pixel.x<-CANVAS_HITBOX_SIZE || pixel.y<-CANVAS_HITBOX_SIZE || pixel.x>size.x+CANVAS_HITBOX_SIZE || pixel.y>size.y+CANVAS_HITBOX_SIZE) continue;
       const key=`${Math.floor(pixel.x/cellSize)}:${Math.floor(pixel.y/cellSize)}`;
