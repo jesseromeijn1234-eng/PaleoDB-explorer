@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101b2a" />
-  <meta name="paleodb-build" content="2026-11-20-map-search-basemap-v5" />
+  <meta name="paleodb-build" content="2026-11-20-performance-v6" />
   <meta name="description" content="Een overzichtelijke explorer voor fossielvondsten en paleobiologische gegevens uit de Paleobiology Database." />
   <title>PaleoDB Explorer · snelle kaartweergave</title>
-  <!-- Build: 2026-11-20-map-search-basemap-v5 -->
+  <!-- Build: 2026-11-20-performance-v6 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
   <style>
     :root {
       --bg: #f4f6f8; --surface: #fff; --surface-2: #f8fafb; --ink: #142235;
@@ -63,6 +63,8 @@
     .btn.primary:hover { background:var(--teal-dark); }
     .btn.soft { background:var(--teal-soft); color:var(--teal-dark); border-color:#d4efea; }
     .btn.small { padding:8px 11px; font-size:11px; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #65bfb4; outline-offset:2px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior:auto !important; animation-duration:.01ms !important; transition-duration:.01ms !important; } }
     .filters { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:17px 19px 18px; margin-bottom:20px; }
     .filters-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
     .section-title { font:700 13px 'Manrope',sans-serif; display:flex; gap:9px; align-items:center; }
@@ -113,6 +115,8 @@
     .pager span { padding:0 5px; }
     .map-panel { overflow:hidden; }
     #map { height:560px; width:100%; background:#e8eef0; z-index:1; }
+    .leaflet-container { font-family:"DM Sans",sans-serif; background:#e8eef0; }
+    .content.map-focused:not(.filters-open) > .filters, .content.map-focused:not(.filters-open) > .quick-presets { display:none; }
     .map-toolbar { display:flex;gap:7px;align-items:center; }
     .segmented { display:flex;gap:3px;background:#f0f3f5;padding:3px;border-radius:9px; }
     .segmented button { border:0;background:transparent;color:#758396;padding:7px 10px;border-radius:7px;font-size:10px;font-weight:700; }
@@ -274,8 +278,8 @@
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Record details</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
 <div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt PaleoDB Explorer</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek op taxon</strong><p>Vul een soort of groep in, bijvoorbeeld Tyrannosaurus of Trilobita. De zoekopdracht neemt ook onderliggende taxa mee.</p></div><div class="help-card"><strong>⏳ Filter op tijd</strong><p>Kies een geologisch tijdvak of geef een ouderdomsbereik op in Ma (miljoen jaar geleden).</p></div><div class="help-card"><strong>🌍 Verken de kaart</strong><p>De kaart opent in Noord-Holland. Je kunt verder inzoomen en de kaart verschuiven; bij iedere nieuwe kaartpositie worden records opgehaald voor het zichtbare gebied. Je kunt uitzoomen tot ongeveer dezelfde kaartschaal als het oude Canada-overzicht, maar de kaart start niet in Canada. Paleocoördinaten worden alleen getoond wanneer PBDB ze heeft meegeleverd.</p></div></div><p class="footer-note">De kaart tekent de opgehaalde fossielpunten in één canvaslaag in plaats van duizenden losse kaartobjecten. Elk punt blijft op zijn eigen PBDB-coördinaat staan en heeft een vierkante klikzone. Zoek boven de kaart op plaatsen of in de geladen fossielrecords. Plaatszoeken gebruikt Nominatim van OpenStreetMap en start alleen na een bewuste zoekactie; er is geen automatische autocomplete.</p></div></div></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
 <script>
 (() => {
   'use strict';
@@ -299,6 +303,8 @@
   let mapTileLayer = null;
   let mapTileLoads = 0;
   let mapTileErrors = 0;
+  let mapTileFallbackTimer = null;
+  let mapTileProvider = "osm";
   // De kaart begint in Noord-Holland. De oude Canada-omvang wordt alleen gebruikt
   // om de maximale uitzoomstand ongeveer gelijk te houden; de kaart centreert daar NIET.
   const API_PAGE_SIZE = 500;
@@ -385,13 +391,24 @@
       east: Number(normalizeLongitude(east + lngPad).toFixed(3))
     };
   }
-  function sameOrdinaryLongitudeRange(bounds) {
-    return bounds.west <= bounds.east;
+  function longitudeSegments(west, east) {
+    return west <= east ? [[west, east]] : [[west, 180], [-180, east]];
   }
   function boundsContain(outer, inner) {
-    if (!sameOrdinaryLongitudeRange(outer) || !sameOrdinaryLongitudeRange(inner)) return false;
-    return outer.south <= inner.south && outer.north >= inner.north &&
-      outer.west <= inner.west && outer.east >= inner.east;
+    if (outer.south > inner.south || outer.north < inner.north) return false;
+    const outerSegments = longitudeSegments(outer.west, outer.east);
+    const innerSegments = longitudeSegments(inner.west, inner.east);
+    return innerSegments.every(innerSegment => outerSegments.some(outerSegment =>
+      outerSegment[0] <= innerSegment[0] && outerSegment[1] >= innerSegment[1]
+    ));
+  }
+  function recordInsideBounds(record, bounds) {
+    const lat = getLat(record);
+    const rawLng = getLng(record);
+    if (lat === null || rawLng === null) return false;
+    const lng = normalizeLongitude(rawLng);
+    const insideLng = bounds.west <= bounds.east ? (lng >= bounds.west && lng <= bounds.east) : (lng >= bounds.west || lng <= bounds.east);
+    return lat >= bounds.south && lat <= bounds.north && insideLng;
   }
   function sameBounds(a, b) {
     const keys = ['south','north','west','east'];
@@ -401,8 +418,15 @@
     return JSON.stringify(filters);
   }
   function findCachedArea(filtersKey, bounds) {
-    // Reuse only the exact same viewport so records and totals always match the view.
-    return mapCache.find(entry => entry.filtersKey === filtersKey && sameBounds(entry.bounds, bounds));
+    // Partial previews are reused only for the exact same viewport. A complete
+    // cached area can also serve a smaller viewport without missing records.
+    const exactIndex = mapCache.findIndex(entry => entry.filtersKey === filtersKey && sameBounds(entry.bounds, bounds));
+    if (exactIndex >= 0) { const exact = mapCache.splice(exactIndex, 1)[0]; mapCache.unshift(exact); return exact; }
+    const coveringIndex = mapCache.findIndex(entry => entry.filtersKey === filtersKey && entry.complete && boundsContain(entry.bounds, bounds));
+    if (coveringIndex < 0) return null;
+    const covering = mapCache.splice(coveringIndex, 1)[0];
+    mapCache.unshift(covering);
+    return { ...covering, bounds: { ...bounds }, records: covering.records.filter(record => recordInsideBounds(record, bounds)), derived: true };
   }
   function cacheArea(filtersKey, bounds, data, complete=false) {
     mapCache = mapCache.filter(entry => !(entry.filtersKey === filtersKey && sameBounds(entry.bounds, bounds)));
@@ -463,7 +487,7 @@
       notice('Nieuwe gebieden worden opgehaald op basis van moderne kaartcoördinaten. De kaart is daarom teruggezet naar moderne coördinaten.');
     }
     hasActiveQuery=true;
-    loadViewportRecords({ reason: 'search' });
+    return loadViewportRecords({ reason: 'search' });
   }
   async function loadViewportRecords({ reason='map', useCache=true } = {}) {
     const f=currentFilters();
@@ -482,10 +506,10 @@
       const cached=findCachedArea(filtersKey,queryBounds);
       if(cached) {
         clearNotice();
-        const cacheNote = cached.complete ? 'volledig kaartgebied' : 'snelle selectie van dit kaartgebied';
-        setLoadedRecords(cached.records,`${fmt(cached.records.length)} records uit cache · ${cacheNote}`);
+        const cacheNote = cached.derived ? 'uit eerder volledig geladen groter gebied' : (cached.complete ? 'volledig kaartgebied' : 'snelle selectie van dit kaartgebied');
+        setLoadedRecords(cached.records,fmt(cached.records.length) + ' records uit cache · ' + cacheNote);
         setStatus('Gebied uit cache geladen');
-        setMapAreaStatus(`Cache · ${fmt(cached.records.length)} records · ${cached.complete ? 'volledig gebied' : 'snelle selectie'} · geen nieuwe API-aanvraag`);
+        setMapAreaStatus('Cache · ' + fmt(cached.records.length) + ' records · ' + cacheNote + ' · geen nieuwe API-aanvraag');
         return;
       }
     }
@@ -683,8 +707,16 @@
   function renderRecordTable() { const node=$('recordsTable');node.innerHTML=tableHtml(filteredRecords);bindTable(node); }
   function renderRecent() { const node=$('recentTable');node.innerHTML=tableHtml(filteredRecords,true);bindTable(node); }
   function renderAll() {
-    filteredRecords=filteredRecords||[]; summaryStats(); renderCharts(); renderRecent(); renderRecordTable();
-    if($('view-map').classList.contains('active'))renderMap();
+    filteredRecords = filteredRecords || [];
+    summaryStats();
+    const overviewVisible = $('view-overview').classList.contains('active');
+    const timelineVisible = $('view-timeline').classList.contains('active');
+    const recordsVisible = $('view-records').classList.contains('active');
+    const mapVisible = $('view-map').classList.contains('active');
+    if (overviewVisible || timelineVisible) renderCharts();
+    if (overviewVisible) renderRecent();
+    if (recordsVisible) renderRecordTable();
+    if (mapVisible) requestMapCanvasPaint();
   }
   function showDetails(r) {
     const tax=getTaxon(r); $('detailTitle').textContent=tax; $('detailSubtitle').textContent=`PBDB record ${val(r,'occurrence_no','occurrence_id','occ_no','id')||'—'}`;
@@ -829,6 +861,39 @@
     }
   }
 
+  function installBaseMapTiles(provider) {
+    if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
+    if (mapTileLayer && map && map.hasLayer(mapTileLayer)) map.removeLayer(mapTileLayer);
+    mapTileProvider = provider; mapTileLoads = 0; mapTileErrors = 0;
+    const isCarto = provider === 'carto';
+    const url = isCarto ? 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const attribution = isCarto
+      ? '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+      : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
+    mapTileLayer = L.tileLayer(url,{minZoom:0,maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:1,attribution:attribution});
+    mapTileLayer.on('tileload',() => {
+      if (provider !== mapTileProvider) return;
+      mapTileLoads++;
+      if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
+      if (mapTileLoads === 1) setMapAreaStatus(isCarto ? 'Kaartachtergrond geladen via alternatieve bron' : 'Achtergrondkaart geladen · PBDB-vindplaatsen worden apart opgehaald');
+    });
+    mapTileLayer.on('tileerror',() => {
+      if (provider !== mapTileProvider) return;
+      mapTileErrors++;
+      if (!isCarto && mapTileErrors >= 5 && mapTileLoads < 2) installBaseMapTiles('carto');
+      else if (isCarto && mapTileErrors >= 5 && mapTileLoads === 0) {
+        setStatus('Kaartachtergrond niet bereikbaar',false);
+        setMapAreaStatus('Kaarttegels van beide kaartbronnen konden niet worden geladen');
+        notice('De kaartachtergrond is niet bereikbaar. De PBDB-gegevens kunnen nog wel laden. Controleer of je netwerk kaartbronnen blokkeert.','error');
+      }
+    });
+    mapTileLayer.addTo(map);
+    mapTileFallbackTimer = setTimeout(() => {
+      if (provider !== mapTileProvider || mapTileLoads > 0) return;
+      if (!isCarto) installBaseMapTiles('carto');
+      else { setStatus('Kaartachtergrond niet bereikbaar',false); setMapAreaStatus('De kaarttegels reageren niet · controleer de verbinding'); notice('De kaartachtergrond reageert niet. Probeer de pagina opnieuw of controleer je verbinding.','error'); }
+    },isCarto ? 7000 : 4200);
+  }
   function renderMap() {
     if (!window.L) {
       $('map').innerHTML = '<div class="empty"><strong>Kaartbibliotheek niet geladen</strong><span>Controleer je internetverbinding en vernieuw de pagina.</span></div>';
@@ -838,31 +903,7 @@
       map = L.map('map', { worldCopyJump: true, zoomSnap: 0.25, maxZoom: 18, minZoom: 2, preferCanvas: true });
       map.setView(INITIAL_CENTER, INITIAL_ZOOM);
       updateMapZoomFloor();
-      // Gebruik het officiële standaardtegeladres. De OSM-tegelrichtlijn schrijft
-      // tile.openstreetmap.org als host voor (niet a/b/c.tile.openstreetmap.org).
-      mapTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        minZoom: 0,
-        maxZoom: 19,
-        updateWhenIdle: true,
-        updateWhenZooming: false,
-        keepBuffer: 1,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
-      });
-      mapTileLayer.on('tileload', () => {
-        mapTileLoads++;
-        if (mapTileLoads === 1) {
-          setMapAreaStatus('Achtergrondkaart geladen · PBDB-vindplaatsen worden apart opgehaald');
-        }
-      });
-      mapTileLayer.on('tileerror', () => {
-        mapTileErrors++;
-        if (mapTileErrors >= 4 && mapTileLoads === 0) {
-          setStatus('Kaarttegels niet geladen', false);
-          setMapAreaStatus('Achtergrondkaart niet beschikbaar · vernieuw de pagina of controleer je internetverbinding');
-          notice('De kaartachtergrond kon niet worden geladen. De fossielgegevens kunnen wel beschikbaar zijn; controleer de verbinding of probeer de pagina opnieuw.', 'error');
-        }
-      });
-      mapTileLayer.addTo(map);
+      installBaseMapTiles('osm');
       ensureMapCanvas();
       map.on('move', requestMapCanvasPaint);
       map.on('zoom', requestMapCanvasPaint);
@@ -896,6 +937,12 @@
       }, 100);
     } else {
       ensureMapCanvas();
+      setTimeout(() => {
+        if (!map) return;
+        map.invalidateSize({ pan:false });
+        updateMapZoomFloor();
+        requestMapCanvasPaint();
+      },40);
     }
     requestMapCanvasPaint();
   }
