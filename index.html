@@ -247,6 +247,7 @@
           <div class="field"><label for="stratigraphyInput">Formatie / stratigrafie</label><input id="stratigraphyInput" type="text" placeholder="Bijv. Hell Creek"></div>
           <div class="field"><label for="authorizerInput">Authorizer ID</label><input id="authorizerInput" type="number" min="1" step="1" placeholder="PBDB persoons-ID"></div>
           <div class="field"><label for="refAuthorInput">Referentie-auteur</label><input id="refAuthorInput" type="text" placeholder="Bijv. Smith"></div>
+          <div class="field"><label for="researchGroupInput">Research group</label><input id="researchGroupInput" type="text" placeholder="PBDB research group"></div>
         </div>
         <div class="filter-footer"><div class="filter-hint">Zoeken gebruikt alleen het zichtbare kaartgebied. Verschuif of zoom de kaart om een ander gebied te laden.</div><div class="filter-buttons"><button class="btn small" id="resetFilters">Wis filters</button><button class="btn primary small" id="runSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>Toon resultaten</button></div></div>
       </section>
@@ -407,14 +408,14 @@
   const getPlace = r => first(val(r,'formation','stratigraphic_formation','state','province','country','continent'),'—');
   const numFormat = v => v===null || v===undefined ? '—' : Number(v).toLocaleString('nl-NL',{maximumFractionDigits:1});
 
-  function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim(), stratigraphy:$('stratigraphyInput').value.trim(), authorizer:$('authorizerInput').value.trim(), refAuthor:$('refAuthorInput').value.trim()}; }
+  function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim(), stratigraphy:$('stratigraphyInput').value.trim(), authorizer:$('authorizerInput').value.trim(), refAuthor:$('refAuthorInput').value.trim(), researchGroup:$('researchGroupInput').value.trim()}; }
   function intervalIdForName(name){const row=timeScaleRecords.find(item=>first(val(item,'nam','name'),'')===name);return row?String(val(row,'oid')).replace(/^int:/,''):'';}
   function buildApiUrl(f,bounds=null){
     const p=new URLSearchParams({vocab:'pbdb',limit:String(PBDB_REQUEST_LIMIT),show:SHOW});
     if(f.taxon)p.set('base_name',f.taxon);
     if(f.interval){const id=intervalIdForName(f.interval);if(id)p.set('interval_id',id);else p.set('interval',f.interval);}
     if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);
-    if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
+    if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);if(f.researchGroup)p.set('research_group',f.researchGroup);
     if(bounds){p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));}
     p.set('rowcount','');return `${API}/occs/list.json?${p.toString()}`;
   }
@@ -576,7 +577,7 @@
     if(filters.taxon)p.set('base_name',filters.taxon);
     if(filters.interval){const id=intervalIdForName(filters.interval);if(id)p.set('interval_id',id);else p.set('interval',filters.interval);}
     if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
-    if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
+    if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);if(filters.researchGroup)p.set('research_group',filters.researchGroup);
     p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));p.set('rowcount','');
     return API+(summaryLevel?'/colls/summary.json?':'/colls/list.json?')+p.toString();
   }
@@ -917,7 +918,7 @@
       const filters=currentFilters(),p=new URLSearchParams({clust_id:String(clusterId),limit:'20',offset:String(offset),show:'ref,loc,time,strat,geo,lith,entname,prot',vocab:'pbdb'});
       if(filters.taxon)p.set('base_name',filters.taxon);if(filters.interval){const iid=intervalIdForName(filters.interval);if(iid)p.set('interval_id',iid);else p.set('interval',filters.interval);}
       if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
-      if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
+      if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);if(filters.researchGroup)p.set('research_group',filters.researchGroup);
       const response=await fetch(API+'/colls/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
       const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];if(offset===0)container.innerHTML='';
       rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'PBDB-collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
@@ -1341,7 +1342,7 @@
   async function loadDiversity(){
     if(!map){$('diversityMessage').textContent='Open de kaart eerst om een kaartgebied te kiezen.';return;}$('diversityMessage').textContent='PBDB-diversiteitscurve ophalen…';
     const b=getViewportQueryBounds(),f=currentFilters(),p=new URLSearchParams({count:$('diversityCount').value,time_reso:$('diversityResolution').value,vocab:'pbdb',lngmin:String(b.west),lngmax:String(b.east),latmin:String(b.south),latmax:String(b.north)});
-    if(f.taxon)p.set('base_name',f.taxon);if(f.interval){const iid=intervalIdForName(f.interval);if(iid)p.set('interval_id',iid);else p.set('interval',f.interval);}if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
+    if(f.taxon)p.set('base_name',f.taxon);if(f.interval){const iid=intervalIdForName(f.interval);if(iid)p.set('interval_id',iid);else p.set('interval',f.interval);}if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);if(f.researchGroup)p.set('research_group',f.researchGroup);
     try{const response=await fetch(API+'/occs/quickdiv.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=(json.records||[]).map(r=>({...r,total:num(val(r,'dsb','total'))||0,age:(num(val(r,'eag'))+num(val(r,'lag')))/2})).filter(r=>Number.isFinite(r.age)).sort((a,b)=>b.age-a.age);
       if(!rows.length){$('diversityMessage').textContent='PBDB gaf geen diversiteitsresultaten terug voor dit kaartgebied.';$('diversityEmpty').style.display='block';if(diversityChart){diversityChart.destroy();diversityChart=null;}return;}
       $('diversityEmpty').style.display='none';if(diversityChart)diversityChart.destroy();
@@ -1386,7 +1387,7 @@
     }
     $('sidebar').classList.remove('open');
   }
-  function resetFilters(){['taxonInput','intervalInput','oldestInput','youngestInput','stratigraphyInput','authorizerInput','refAuthorInput'].forEach(id=>$(id).value='');$('regionInput').value='';clearNotice();runSearch();}
+  function resetFilters(){['taxonInput','intervalInput','oldestInput','youngestInput','stratigraphyInput','authorizerInput','refAuthorInput','researchGroupInput'].forEach(id=>$(id).value='');$('regionInput').value='';clearNotice();runSearch();}
   // Navigation and controls
   document.querySelectorAll('.nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
   document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.goto)));
