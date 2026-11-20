@@ -320,7 +320,7 @@
 </div>
 
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Record details</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
-<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt PaleoDB Explorer</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek op taxon</strong><p>Vul een soort of groep in, bijvoorbeeld Tyrannosaurus of Trilobita. De zoekopdracht neemt ook onderliggende taxa mee.</p></div><div class="help-card"><strong>⏳ Filter op tijd</strong><p>Kies een geologisch tijdvak of geef een ouderdomsbereik op in Ma (miljoen jaar geleden).</p></div><div class="help-card"><strong>🌍 Verken de kaart</strong><p>De kaart opent in Noord-Holland. Bij iedere kaartpositie worden alle fossielrecords voor het zichtbare gebied opgehaald. Je kunt verder inzoomen en uitzoomen tot de vaste maximale kaartomvang. Paleocoördinaten worden alleen getoond wanneer PBDB ze heeft meegeleverd.</p></div></div><p class="footer-note">De kaart tekent de opgehaalde fossielpunten in één canvaslaag in plaats van duizenden losse kaartobjecten. Elk punt blijft op zijn eigen PBDB-coördinaat staan en heeft een vierkante klikzone. Zoek boven de kaart op plaatsen of in de geladen fossielrecords. Plaatszoeken gebruikt Nominatim van OpenStreetMap en start alleen na een bewuste zoekactie; er is geen automatische autocomplete.</p></div></div></div>
+<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt PaleoDB Explorer</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek op taxon</strong><p>Vul een soort of groep in, bijvoorbeeld Tyrannosaurus of Trilobita. De zoekopdracht neemt ook onderliggende taxa mee.</p></div><div class="help-card"><strong>⏳ Filter op tijd</strong><p>Kies een geologisch tijdvak of geef een ouderdomsbereik op in Ma (miljoen jaar geleden).</p></div><div class="help-card"><strong>🌍 Verken de kaart</strong><p>De kaart opent in Noord-Holland. Bij iedere kaartpositie worden alle fossielrecords voor het zichtbare gebied opgehaald. Je kunt verder inzoomen en uitzoomen tot de vaste maximale kaartomvang. Paleocoördinaten worden alleen getoond wanneer PBDB ze heeft meegeleverd.</p></div></div><p class="footer-note">De kaart groepeert PBDB-collecties in een snelle canvaslaag. Klik op een groep om in te zoomen; open een collectie om pas dan de bijbehorende occurrences op te halen. Zoek boven de kaart op plaatsen of fossielnamen. De taxonomie-browser en diversiteitsanalyse gebruiken aparte PBDB-endpoints. Plaatszoeken gebruikt Nominatim van OpenStreetMap en start alleen na een bewuste zoekactie; er is geen automatische autocomplete.</p></div></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
@@ -868,44 +868,56 @@
     return hits;
   }
 
-  function handleCanvasMapClick(event) {
-    const hits=findCanvasHits(event.containerPoint);
-    if(!hits.length) return;
-    const cluster=hits[0].point;
-    if(cluster.count===1) {
-      showDetails(cluster.records[0]);
-      return;
-    }
-
-    // A cluster click zooms into its real geographic extent. When its members
-    // share virtually the same coordinates or max zoom is reached, show a list.
-    const spread=Math.max(cluster.maxX-cluster.minX,cluster.maxY-cluster.minY);
-    const zoomRoom=map.getMaxZoom()-map.getZoom();
-    if(zoomRoom>0.35) {
-      if(spread>3.5 && cluster.maxLat>cluster.minLat && cluster.maxLng>cluster.minLng) {
-        map.fitBounds([[cluster.minLat,cluster.minLng],[cluster.maxLat,cluster.maxLng]],{
-          padding:[64,64],
-          maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),
-          animate:true
-        });
-      } else {
-        map.setView([cluster.lat,cluster.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});
-      }
-      return;
-    }
-
-    const maxRows=40;
-    const rows=cluster.records.slice(0,maxRows).map(record=>
-      `<div style="padding:7px 0;border-top:1px solid #edf0f3"><strong>${esc(getTaxon(record))}</strong><br><span style="color:#748094;font-size:11px">${esc(getInterval(record))} · ${getAge(record)!==null?`${numFormat(getAge(record))} Ma`:'ouderdom onbekend'} · ${esc(getPlace(record))} · PBDB ${esc(val(record,'occurrence_no','occurrence_id','occ_no','id')||'—')}</span></div>`
-    ).join('');
-    const more=cluster.count>maxRows?`<div style="padding:8px 0;color:#748094;font-size:11px">Toont ${fmt(maxRows)} van ${fmt(cluster.count)} fossielrecords op deze plek.</div>`:'';
-    const content=`<strong>${fmt(cluster.count)} fossielrecords in deze groep</strong><div style="margin-top:7px;max-height:230px;overflow:auto">${rows}${more}</div>`;
-    L.popup({maxWidth:360,maxHeight:340,autoPan:true})
-      .setLatLng([cluster.lat,cluster.lng])
-      .setContent(content)
-      .openOn(map);
+  function ageMarkerColour(age) {
+    if(age===null||!Number.isFinite(age)) return '#668b91';
+    const hue=190-Math.max(0,Math.min(1,age/600))*155;
+    return `hsl(${hue},58%,39%)`;
   }
-
+  function collectionPopupNode(collection) {
+    const node=document.createElement('div');node.className='collection-popup';
+    const name=first(val(collection,'nam','name'),'Naamloze PBDB-collectie');
+    const interval=[val(collection,'oei'),val(collection,'oli')].filter(Boolean).join(' – ')||'Tijdvak onbekend';
+    const age=collectionAge(collection),formation=first(val(collection,'sfm','sgr','smb','formation'),'—');
+    const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'ref','ref_author'),'Referentie niet beschikbaar');
+    node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> occurrences in deze collectie</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Laad occurrences</button><button type="button" class="collection-filter-name">Filter op taxon</button></div><div class="collection-occ-list" hidden></div>`;
+    node.querySelector('.collection-load-occ').addEventListener('click',()=>loadCollectionOccurrences(collection,node.querySelector('.collection-occ-list')));
+    node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'nam','name'),'');$('taxonInput').value=name;switchView('map');runSearch();});
+    return node;
+  }
+  async function loadCollectionOccurrences(collection,container) {
+    if(!container)return;container.hidden=false;container.textContent='Occurrences ophalen…';
+    try {
+      const p=new URLSearchParams({coll_id:collectionId(collection),limit:'all',show:'phylo,ident,loc,time',vocab:'pbdb'});
+      const response=await fetch(API+'/occs/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];
+      if(!rows.length){container.textContent='Geen occurrence-records beschikbaar.';return;}
+      container.innerHTML=rows.slice(0,100).map(record=>`<div><b>${esc(getTaxon(record))}</b><small>${esc(getInterval(record))} · ${getAge(record)===null?'ouderdom onbekend':numFormat(getAge(record))+' Ma'} · PBDB ${esc(val(record,'occurrence_no','occurrence_id','occ_no','id')||'—')}</small></div>`).join('')+(rows.length>100?`<div class="feature-muted">Toont 100 van ${fmt(rows.length)} occurrences.</div>`:'');
+    }catch(error){container.textContent='Occurrences konden niet geladen worden: '+error.message;}
+  }
+  function openCollectionMarker(marker) {
+    if(marker.count===1){const collection=marker.records[0];L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);return;}
+    const zoomRoom=map.getMaxZoom()-map.getZoom();
+    if(zoomRoom>0.35){
+      const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
+      if(spread>4&&marker.maxLat>marker.minLat&&marker.maxLng>marker.minLng)map.fitBounds([[marker.minLat,marker.minLng],[marker.maxLat,marker.maxLng]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});
+      else map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});
+      return;
+    }
+    const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(marker.count)} collecties in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} occurrences · kies een collectie voor details</div><div class="collection-occ-list"></div>`;
+    const list=node.querySelector('.collection-occ-list');
+    marker.records.slice(0,50).forEach(collection=>{
+      const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';
+      button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';
+      button.addEventListener('click',()=>{const lat=collectionLat(collection,mapMode==='paleo'),lng=collectionLng(collection,mapMode==='paleo');L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});
+      list.appendChild(button);
+    });
+    if(marker.count>50){const more=document.createElement('div');more.className='meta';more.textContent='Toont 50 van '+fmt(marker.count)+' collecties in deze groep.';list.appendChild(more);}
+    L.popup({maxWidth:390,maxHeight:420,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(node).openOn(map);
+  }
+  function handleCanvasMapClick(event) {
+    const hits=findCanvasHits(event.containerPoint);if(!hits.length)return;openCollectionMarker(hits[0].point);
+  }
   function getClusterCellSize(zoom) {
     if(zoom<6) return 68;
     if(zoom<8) return 60;
@@ -940,7 +952,7 @@
     mapCanvasPoints=[];
     mapHitBuckets=new Map();
     const visibleBounds=map.getBounds();
-    const recordsToPaint=queryOccurrenceSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='paleo');
+    const recordsToPaint=queryCollectionSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='paleo');
     const searchHighlightActive=mapSearchMatchedKeys instanceof Set;
     const cellSize=getClusterCellSize(map.getZoom());
     const grouped=new Map();
@@ -958,7 +970,7 @@
       const key=`${Math.floor(pixel.x/cellSize)}:${Math.floor(pixel.y/cellSize)}`;
       let group=grouped.get(key);
       if(!group) {
-        group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0};
+        group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,ageSum:0,ageCount:0};
         grouped.set(key,group);
       }
       group.records.push(record);
@@ -969,6 +981,8 @@
       group.minLat=Math.min(group.minLat,lat); group.maxLat=Math.max(group.maxLat,lat);
       group.minLng=Math.min(group.minLng,lng); group.maxLng=Math.max(group.maxLng,lng);
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapRecordKey(record))) group.matchCount++;
+      group.occurrenceCount+=collectionOccurrences(record);
+      const age=collectionAge(record);if(age!==null){group.ageSum+=age;group.ageCount++;}
       validCount++;
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapRecordKey(record))) matchingVisibleCount++;
     }
@@ -982,7 +996,7 @@
         lat:group.sumLat/count,lng:group.sumLng/count,
         minX:group.minX,maxX:group.maxX,minY:group.minY,maxY:group.maxY,
         minLat:group.minLat,maxLat:group.maxLat,minLng:group.minLng,maxLng:group.maxLng,
-        matchCount:group.matchCount,size:clusterMarkerSize(count,cellSize)
+        matchCount:group.matchCount,size:clusterMarkerSize(count,cellSize),occurrenceCount:group.occurrenceCount,age:group.ageCount?group.ageSum/group.ageCount:null
       };
       mapCanvasPoints.push(marker);
       const bucketKey=pointBucketKey(x,y);
@@ -994,7 +1008,7 @@
       const py=Math.round(y-half);
       const highlighted=searchHighlightActive && marker.matchCount>0;
       mapCanvasCtx.globalAlpha=searchHighlightActive && !highlighted ? 0.18 : 1;
-      mapCanvasCtx.fillStyle=highlighted?'#f0783f':(mapMode==='paleo'?'#d18a36':'#117f78');
+      mapCanvasCtx.fillStyle=highlighted?'#f0783f':ageMarkerColour(marker.age);
       mapCanvasCtx.lineWidth=3;
       mapCanvasCtx.strokeStyle='rgba(10,29,42,.9)';
       mapCanvasCtx.strokeRect(px-1.5,py-1.5,marker.size+3,marker.size+3);
@@ -1017,15 +1031,14 @@
     mapCanvasCtx.textAlign='start';
     mapCanvasCtx.textBaseline='alphabetic';
     const clusterCount=mapCanvasPoints.filter(marker=>marker.count>1).length;
-    $('mapCount').textContent=searchHighlightActive
-      ? `${fmt(matchingVisibleCount)} zoekmatches · ${fmt(validCount)} fossielen in ${fmt(mapCanvasPoints.length)} markers`
-      : `${fmt(validCount)} fossielen in beeld · ${fmt(clusterCount)} groepen + ${fmt(mapCanvasPoints.length-clusterCount)} losse vondsten`;
+    const occurrenceTotal=mapCanvasPoints.reduce((sum,marker)=>sum+marker.occurrenceCount,0);
+    $('mapCount').textContent=`${fmt(validCount)} collecties · ${fmt(occurrenceTotal)} occurrences · ${fmt(clusterCount)} groepen`;
     if(mapMode==='paleo') {
       setMapAreaStatus('Paleocoördinaten van de geladen selectie · ga terug naar modern om andere gebieden op te halen');
     } else if(!hasActiveQuery) {
       setMapAreaStatus('Noord-Holland · klaar om het zichtbare kaartgebied te laden');
-    } else if(!activeSearchController) {
-      setMapAreaStatus(`${fmt(filteredRecords.length)} fossielrecords geladen voor het huidige kaartgebied`);
+    } else if(!activeCollectionController) {
+      setMapAreaStatus(`${fmt(mapCollections.length)} collecties geladen voor het huidige kaartgebied`);
     }
   }
   function installBaseMapTiles(provider) {
