@@ -1150,6 +1150,16 @@
     };
     return matches.sort((a, b) => score(a) - score(b)).slice(0, 80);
   }
+  function findLoadedCollectionMatches(query){
+    const q=normalizeSearchText(query);if(!q)return [];
+    return mapCollections.filter(collection=>normalizeSearchText(Object.values(collection||{}).filter(value=>typeof value==='string'||typeof value==='number').join(' ')).includes(q)).slice(0,100);
+  }
+  function selectMapCollection(index){
+    const collection=mapCollectionSearchResults[index];if(!collection)return;
+    const lat=collectionLat(collection,mapMode==='paleo'),lng=collectionLng(collection,mapMode==='paleo');if(lat===null||lng===null)return;
+    map.flyTo([lat,lng],Math.max(13,map.getZoom()),{duration:.55});
+    L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);
+  }
   async function geocodeMapQuery(query) {
     const cacheKey = normalizeSearchText(query);
     if (mapGeocodeCache.has(cacheKey)) return mapGeocodeCache.get(cacheKey);
@@ -1190,80 +1200,38 @@
     while (mapGeocodeCache.size > 60) mapGeocodeCache.delete(mapGeocodeCache.keys().next().value);
     return results;
   }
-  function renderMapSearchResults(query, places, matches, message = '') {
-    const container = $('mapSearchResults');
-    const placeHtml = places.length ? places.map((place, index) => `
-      <button class="map-search-result" type="button" data-place-index="${index}">
-        <strong>${esc(place.name)}</strong><span>${esc(place.label)} · ${esc(place.type)}</span>
-      </button>`).join('') : '<div class="map-search-empty">Geen plaatsresultaten.</div>';
-    const fossilHtml = matches.length ? matches.slice(0, 8).map(record => {
-      const index = records.indexOf(record);
-      const age = getAge(record);
-      const id = val(record, 'occurrence_no', 'occurrence_id', 'occ_no', 'id');
-      const details = [getInterval(record), age !== null ? `${numFormat(age)} Ma` : '', getPlace(record), id ? `ID ${id}` : ''].filter(Boolean).join(' · ');
-      return `<button class="map-search-result" type="button" data-record-index="${index}"><strong>${esc(getTaxon(record))}</strong><span>${esc(details || 'PBDB-vondst')}</span></button>`;
-    }).join('') : '<div class="map-search-empty">Geen overeenkomende stippen in de nu geladen gegevens.</div>';
-    const extraMatches = matches.length > 8 ? `<div class="map-search-status">En nog ${fmt(matches.length - 8)} overeenkomende records in de geladen gegevens.</div>` : '';
-    container.innerHTML = `
-      <div class="map-search-results-head"><span>Zoekresultaten voor “${esc(query)}”</span><span>${fmt(places.length)} plaatsen · ${fmt(matches.length)} fossielen</span></div>
-      <div class="map-search-result-groups">
-        <div><div class="map-search-group-title">Plaatsen & steden</div><div class="map-search-result-list">${placeHtml}</div></div>
-        <div><div class="map-search-group-title">Fossielen & stippen</div><div class="map-search-result-list">${fossilHtml}</div>${extraMatches}</div>
-      </div>
-      ${message ? `<div class="map-search-status">${esc(message)}</div>` : ''}`;
-    container.hidden = false;
+  function renderMapSearchResults(query,places,matches,message=''){
+    const container=$('mapSearchResults');
+    const placeHtml=places.length?places.map((place,index)=>`<button class="map-search-result" type="button" data-place-index="${index}"><strong>${esc(place.name)}</strong><span>${esc(place.label)} · ${esc(place.type)}</span></button>`).join(''):'<div class="map-search-empty">Geen plaatsresultaten.</div>';
+    const collectionHtml=matches.length?matches.slice(0,12).map((collection,index)=>{const age=collectionAge(collection),details=[val(collection,'oei'),val(collection,'oli'),age===null?'':numFormat(age)+' Ma',collectionFormation(collection),fmt(collectionOccurrences(collection))+' occurrences'].filter(Boolean).join(' · ');return `<button class="map-search-result" type="button" data-collection-search-index="${index}"><strong>${esc(first(val(collection,'nam','name'),'PBDB-collectie'))}</strong><span>${esc(details)} · ${esc(first(val(collection,'cc2','cc'),'Land onbekend'))}</span></button>`;}).join(''):'<div class="map-search-empty">Geen collecties gevonden in het huidige kaartgebied.</div>';
+    const more=matches.length>12?`<div class="map-search-status">En nog ${fmt(matches.length-12)} overeenkomende collecties.</div>`:'';
+    container.innerHTML=`<div class="map-search-results-head"><span>Zoekresultaten voor “${esc(query)}”</span><span>${fmt(places.length)} plaatsen · ${fmt(matches.length)} collecties</span></div><div class="map-search-result-groups"><div><div class="map-search-group-title">Plaatsen & steden</div><div class="map-search-result-list">${placeHtml}</div></div><div><div class="map-search-group-title">Collecties & fossielen</div><div class="map-search-result-list">${collectionHtml}</div>${more}</div></div>${message?`<div class="map-search-status">${esc(message)}</div>`:''}`;
+    container.hidden=false;
   }
-  async function runMapSearch() {
-    const query = $('mapSearchInput').value.trim();
-    if (!query) {
-      $('mapSearchResults').hidden = true;
-      mapSearchMatchedKeys = null;
-      requestMapCanvasPaint();
-      return;
-    }
-    if ($('mapSearchButton').disabled) return;
-    const sequence = ++mapSearchSequence;
-    $('mapSearchButton').disabled = true;
-    $('mapSearchButton').textContent = 'Zoeken…';
-    $('mapSearchResults').hidden = false;
-    $('mapSearchResults').innerHTML = '<div class="map-search-empty">Plaatsen en fossielen zoeken…</div>';
-    let places = [];
-    let matches = findLoadedRecordMatches(query);
-    let placeError = '';
-    try {
-      try {
-        places = await geocodeMapQuery(query);
-      } catch (error) {
-        placeError = error.message || 'Plaats zoeken is tijdelijk niet beschikbaar.';
+  async function runMapSearch(){
+    const query=$('mapSearchInput').value.trim();if(!query){clearMapSearch();return;}if($('mapSearchButton').disabled)return;
+    const sequence=++mapSearchSequence;$('mapSearchButton').disabled=true;$('mapSearchButton').textContent='Zoeken…';$('mapSearchResults').hidden=false;$('mapSearchResults').innerHTML='<div class="map-search-empty">Plaatsen en collecties zoeken…</div>';
+    let places=[],matches=findLoadedCollectionMatches(query),placeError='';
+    try{
+      try{places=await geocodeMapQuery(query);}catch(error){placeError=error.message||'Plaatszoeken is tijdelijk niet beschikbaar.';}
+      if(sequence!==mapSearchSequence)return;
+      if(!places.length&&!matches.length){
+        $('taxonInput').value=query;$('stratigraphyInput').value='';
+        await runSearch();if(sequence!==mapSearchSequence)return;
+        matches=findLoadedCollectionMatches(query);
+        if(!matches.length){$('taxonInput').value='';$('stratigraphyInput').value=query;await runSearch();if(sequence!==mapSearchSequence)return;matches=findLoadedCollectionMatches(query);}
       }
-      if (sequence !== mapSearchSequence) return;
-
-      // If neither a place nor a loaded fossil matches, ask PBDB for this taxon
-      // in the current viewport and wait for the results before showing the list.
-      if (!places.length && !matches.length) {
-        $('taxonInput').value = query;
-        await runSearch();
-        if (sequence !== mapSearchSequence) return;
-        matches = findLoadedRecordMatches(query);
-      }
-
-      mapPlaceSearchResults = places;
-      mapSearchMatchedKeys = matches.length ? new Set(matches.map(mapRecordKey)) : null;
-      requestMapCanvasPaint();
-      let message = 'Kies een plaats om de kaart te verplaatsen, of een fossiel om de bijbehorende stip te markeren.';
-      if (placeError) message = 'Plaatszoeken is tijdelijk niet beschikbaar. PBDB-resultaten zijn wel doorzocht.';
-      else if (!places.length && !matches.length) message = 'Geen plaats of fossiel gevonden in het huidige kaartgebied.';
-      renderMapSearchResults(query, places, matches, message);
-      if (matches.length) setMapAreaStatus(fmt(matches.length) + ' overeenkomende fossielrecords gemarkeerd');
-    } catch (error) {
-      if (sequence === mapSearchSequence) renderMapSearchResults(query, places, matches, error.message || 'Zoeken is mislukt. Probeer het opnieuw.');
-    } finally {
-      if (sequence === mapSearchSequence) {
-        $('mapSearchButton').disabled = false;
-        $('mapSearchButton').textContent = 'Zoeken';
-      }
-    }
+      mapPlaceSearchResults=places;mapCollectionSearchResults=matches;
+      mapSearchMatchedKeys=matches.length?new Set(matches.map(mapRecordKey)):null;requestMapCanvasPaint();
+      let message='Plaatsen en PBDB-collecties doorzocht. Klik op een collectie voor details.';
+      if(placeError)message='Plaatszoeken is tijdelijk niet beschikbaar; collecties zijn wel doorzocht.';
+      else if(!places.length&&!matches.length)message='Geen plaats, collectie, taxon of formatie gevonden. Probeer een andere schrijfwijze.';
+      renderMapSearchResults(query,places,matches,message);
+      if(matches.length)setMapAreaStatus(fmt(matches.length)+' overeenkomstige collecties gevonden');
+    }catch(error){if(sequence===mapSearchSequence)renderMapSearchResults(query,places,matches,error.message||'Zoeken is mislukt.');}
+    finally{if(sequence===mapSearchSequence){$('mapSearchButton').disabled=false;$('mapSearchButton').textContent='Zoeken';}}
   }
+
   function selectMapPlace(index) {
     const place = mapPlaceSearchResults[index];
     if (!place || !map) return;
@@ -1303,6 +1271,7 @@
     $('mapSearchResults').innerHTML = '';
     mapSearchMatchedKeys = null;
     mapPlaceSearchResults = [];
+    mapCollectionSearchResults=[];
     requestMapCanvasPaint();
   }
 
@@ -1416,7 +1385,7 @@
       if($('helpModal').classList.contains('open')) $('helpModal').classList.remove('open');
     }
   });
-  $('mapSearchResults').addEventListener('click',event=>{const placeButton=event.target.closest('[data-place-index]');if(placeButton){selectMapPlace(Number(placeButton.dataset.placeIndex));return;}const recordButton=event.target.closest('[data-record-index]');if(recordButton)selectMapRecord(Number(recordButton.dataset.recordIndex));});
+  $('mapSearchResults').addEventListener('click',event=>{const placeButton=event.target.closest('[data-place-index]');if(placeButton){selectMapPlace(Number(placeButton.dataset.placeIndex));return;}const collectionButton=event.target.closest('[data-collection-search-index]');if(collectionButton){selectMapCollection(Number(collectionButton.dataset.collectionSearchIndex));return;}const recordButton=event.target.closest('[data-record-index]');if(recordButton)selectMapRecord(Number(recordButton.dataset.recordIndex));});
   $('taxaBrowserForm').addEventListener('submit',event=>{event.preventDefault();searchTaxonBrowser($('taxaBrowserInput').value);});
   $('taxaBrowserResults').addEventListener('click',event=>{const b=event.target.closest('[data-taxon-result]');if(b)loadTaxonDetails(taxonBrowserResultRows[Number(b.dataset.taxonResult)]);});
   $('taxonDetails').addEventListener('click',event=>{const b=event.target.closest('[data-child-index]');if(b)loadTaxonDetails(taxonChildrenResultRows[Number(b.dataset.childIndex)]);});
