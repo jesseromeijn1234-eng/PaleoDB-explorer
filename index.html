@@ -348,7 +348,7 @@
   const numFormat = v => v===null || v===undefined ? '—' : Number(v).toLocaleString('nl-NL',{maximumFractionDigits:1});
 
   function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim()}; }
-  function buildApiUrl(f, offset=0, bounds=null) {
+  function buildApiUrl(f, bounds=null) {
     const p = new URLSearchParams();
     p.set('vocab','pbdb');
     p.set('limit',String(PBDB_REQUEST_LIMIT));
@@ -430,7 +430,7 @@
   function cacheArea(filtersKey, bounds, data, complete=false) {
     mapCache = mapCache.filter(entry => !(entry.filtersKey === filtersKey && sameBounds(entry.bounds, bounds)));
     mapCache.unshift({ filtersKey, bounds: { ...bounds }, records: data.slice(), complete, savedAt: Date.now() });
-    while (mapCache.length > MAP_CACHE_LIMIT || mapCache.reduce((sum, entry) => sum + entry.records.length, 0) > 18000) {
+    while (mapCache.length > MAP_CACHE_LIMIT || mapCache.reduce((sum, entry) => sum + entry.records.length, 0) > 50000) {
       mapCache.pop();
     }
   }
@@ -513,7 +513,7 @@
       let response;
       const requestTimeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},60000);
       try {
-        response=await fetch(buildApiUrl(filters,0,bounds),{
+        response=await fetch(buildApiUrl(filters,bounds),{
           headers:{'Accept':'application/json'},
           signal:controller.signal
         });
@@ -702,7 +702,6 @@
     const nearest = hits[0].point;
     const nearby = hits
       .filter(hit => Math.abs(hit.point.x - nearest.x) <= (CANVAS_DOT_SIZE / 2 + 1) && Math.abs(hit.point.y - nearest.y) <= (CANVAS_DOT_SIZE / 2 + 1))
-      .slice(0, 12)
       .map(hit => hit.point.record);
     const uniqueNearby = [...new Map(nearby.map(record => [occurrenceKey(record) || `${getTaxon(record)}:${getAge(record)}`, record])).values()];
     let content = '';
