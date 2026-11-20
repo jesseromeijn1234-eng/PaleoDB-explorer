@@ -398,7 +398,7 @@
   const setStatus = (text, ok=true) => { $('connectionStatus').innerHTML = `<i class="dot" style="background:${ok?'#2aa88f':'#d99a43'}"></i> ${esc(text)}`; };
   const getTaxon = r => first(val(r,'taxon_name','accepted_name','identified_name','scientific_name','genus','species'), 'Onbekend taxon');
   const getCollection = r => val(r,'collection_no','collection_id','coll_no','collection');
-  const getAge = r => { const a=num(val(r,'max_ma','older_age','max_age','early_age')); const b=num(val(r,'min_ma','younger_age','min_age','late_age')); if(a!==null&&b!==null)return (a+b)/2; return a??b; };
+  const getAge = r => { const a=num(val(r,'max_ma','older_age','max_age','early_age','eag')); const b=num(val(r,'min_ma','younger_age','min_age','late_age','lag')); if(a!==null&&b!==null)return (a+b)/2; return a??b; };
   const getOld = r => num(val(r,'min_ma','older_age','max_age','early_age'));
   const getYoung = r => num(val(r,'max_ma','younger_age','min_age','late_age'));
   const getLat = (r, paleo=false) => num(paleo ? val(r,'paleolat','pla','paleo_lat','paleolatitude','paleolatitude_deg') : val(r,'lat','latitude'));
@@ -758,33 +758,37 @@
   }
   function uniqueCount(arr, fn) { const s=new Set(); arr.forEach(r=>{const v=fn(r);if(v!==''&&v!==null&&v!==undefined)s.add(String(v));}); return s.size; }
   function summaryStats() {
-    $('statRecords').textContent=fmt(filteredRecords.length);
-    $('statTaxa').textContent=fmt(uniqueCount(filteredRecords,getTaxon));
-    $('statCollections').textContent=fmt(uniqueCount(filteredRecords,getCollection));
-    const ages=filteredRecords.map(getAge).filter(v=>v!==null);
-    $('statAge').textContent=ages.length?`${numFormat(Math.min(...ages))}–${numFormat(Math.max(...ages))}`:'—';
-    $('statAge').style.fontSize=ages.length?'19px':'';
-    if(!filteredRecords.length){ $('statRecordsNote').textContent='Nog geen resultaten'; }
+    const useCollections=!filteredRecords.length&&mapCollections.length>0;
+    if(useCollections){
+      const occurrences=mapCollections.reduce((sum,r)=>sum+collectionOccurrences(r),0);
+      const collections=mapCollections.reduce((sum,r)=>sum+collectionRecordCount(r),0);
+      const ages=mapCollections.map(collectionAge).filter(v=>v!==null);
+      $('statRecords').textContent=fmt(occurrences);$('statTaxa').textContent='—';$('statCollections').textContent=fmt(collections);
+      $('statAge').textContent=ages.length?`${numFormat(Math.min(...ages))}–${numFormat(Math.max(...ages))}`:'—';$('statAge').style.fontSize=ages.length?'19px':'';
+      $('statRecordsNote').textContent='Occurrences in '+fmt(collections)+' PBDB-collecties · open een collectie voor taxonnamen';return;
+    }
+    $('statRecords').textContent=fmt(filteredRecords.length);$('statTaxa').textContent=fmt(uniqueCount(filteredRecords,getTaxon));$('statCollections').textContent=fmt(uniqueCount(filteredRecords,getCollection));
+    const ages=filteredRecords.map(getAge).filter(v=>v!==null);$('statAge').textContent=ages.length?`${numFormat(Math.min(...ages))}–${numFormat(Math.max(...ages))}`:'—';$('statAge').style.fontSize=ages.length?'19px':'';
+    if(!filteredRecords.length)$('statRecordsNote').textContent='Nog geen resultaten';
   }
-  function makeHistogram(arr, bins=12) {
-    const ages=arr.map(getAge).filter(v=>v!==null&&v>=0);
-    if(!ages.length)return {labels:[],counts:[]};
-    let min=Math.min(...ages),max=Math.max(...ages); if(min===max){min=Math.max(0,min-1);max=max+1;}
-    const width=(max-min)/bins, counts=Array(bins).fill(0);
-    ages.forEach(a=>{let idx=Math.min(bins-1,Math.floor((a-min)/width));counts[idx]++;});
-    const labels=counts.map((_,i)=>`${numFormat(min+i*width)}–${numFormat(min+(i+1)*width)} Ma`);
-    return {labels,counts,agesCount:ages.length};
+  function makeHistogram(arr,bins=12,useCollections=false){
+    const items=arr.map(record=>({age:useCollections?collectionAge(record):getAge(record),weight:useCollections?Math.max(1,collectionOccurrences(record)):1})).filter(item=>item.age!==null&&item.age>=0);
+    if(!items.length)return {labels:[],counts:[]};
+    let min=Math.min(...items.map(item=>item.age)),max=Math.max(...items.map(item=>item.age));if(min===max){min=Math.max(0,min-1);max=max+1;}
+    const width=(max-min)/bins,counts=Array(bins).fill(0);items.forEach(item=>{const idx=Math.min(bins-1,Math.floor((item.age-min)/width));counts[idx]+=item.weight;});
+    const labels=counts.map((_,i)=>`${numFormat(min+i*width)}–${numFormat(min+(i+1)*width)} Ma`);return {labels,counts,agesCount:items.length};
   }
   function topTaxa() {
     const c=new Map(); filteredRecords.forEach(r=>{const t=getTaxon(r);if(t!=='Onbekend taxon')c.set(t,(c.get(t)||0)+1);});
     return [...c.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
   }
   function renderCharts() {
-    const h=makeHistogram(filteredRecords,12);
+    const useCollections=!filteredRecords.length&&mapCollections.length>0;
+    const h=makeHistogram(useCollections?mapCollections:filteredRecords,12,useCollections);
     $('overviewChartEmpty').style.display=h.labels.length?'none':'block';
     if(window.Chart && h.labels.length){ const ctx=$('overviewChart').getContext('2d'); if(overviewChart)overviewChart.destroy(); overviewChart=new Chart(ctx,{type:'bar',data:{labels:h.labels,datasets:[{data:h.counts,backgroundColor:'#55b8aa',hoverBackgroundColor:'#208f84',borderRadius:5,maxBarThickness:27}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} vondsten`}}},scales:{x:{grid:{display:false},ticks:{color:'#8995a4',font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:6}},y:{beginAtZero:true,grid:{color:'#eef1f3'},ticks:{color:'#8995a4',font:{size:9},precision:0}}}}}); }
-    const tops=topTaxa(); const max=tops[0]?.[1]||1;
-    $('topTaxa').innerHTML=tops.length?tops.map(([name,count],i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div style="min-width:0"><div class="rank-name" title="${esc(name)}">${esc(name)}</div><div class="rank-bar"><span style="width:${Math.max(4,count/max*100)}%"></span></div></div><div class="rank-count">${fmt(count)}</div></div>`).join(''):'<div class="empty"><strong>Geen taxa om te tonen</strong><span>Zoek eerst in de database.</span></div>';
+    const tops=useCollections?[]:topTaxa(); const max=tops[0]?.[1]||1;
+    $('topTaxa').innerHTML=tops.length?tops.map(([name,count],i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div style="min-width:0"><div class="rank-name" title="${esc(name)}">${esc(name)}</div><div class="rank-bar"><span style="width:${Math.max(4,count/max*100)}%"></span></div></div><div class="rank-count">${fmt(count)}</div></div>`).join(''):(useCollections?'<div class="empty"><strong>Taxa nog niet opgehaald</strong><span>Open een collectie om de bijbehorende fossieltaxa te bekijken.</span></div>':'<div class="empty"><strong>Geen taxa om te tonen</strong><span>Zoek eerst in de database.</span></div>');
     $('timelineEmpty').style.display=h.labels.length?'none':'block';
     if(window.Chart && h.labels.length){ const ctx=$('timelineChart').getContext('2d'); if(timelineChart)timelineChart.destroy(); timelineChart=new Chart(ctx,{type:'bar',data:{labels:h.labels,datasets:[{label:'Fossielvondsten',data:h.counts,backgroundColor:'#6bbeb3',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} vondsten`}}},scales:{x:{grid:{display:false},ticks:{color:'#8391a0',font:{size:10},maxRotation:0,autoSkip:true}},y:{beginAtZero:true,grid:{color:'#edf1f3'},ticks:{color:'#8391a0',precision:0}}}}}); }
   }
@@ -1336,7 +1340,7 @@
   async function loadDiversity(){
     if(!map){$('diversityMessage').textContent='Open de kaart eerst om een kaartgebied te kiezen.';return;}$('diversityMessage').textContent='PBDB-diversiteitscurve ophalen…';
     const b=getViewportQueryBounds(),f=currentFilters(),p=new URLSearchParams({count:$('diversityCount').value,time_reso:$('diversityResolution').value,vocab:'pbdb',lngmin:String(b.west),lngmax:String(b.east),latmin:String(b.south),latmax:String(b.north)});
-    if(f.taxon)p.set('base_name',f.taxon);if(f.interval)p.set('interval',f.interval);if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
+    if(f.taxon)p.set('base_name',f.taxon);if(f.interval){const iid=intervalIdForName(f.interval);if(iid)p.set('interval_id',iid);else p.set('interval',f.interval);}if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
     try{const response=await fetch(API+'/occs/quickdiv.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=(json.records||[]).map(r=>({...r,total:num(val(r,'dsb','total'))||0,age:(num(val(r,'eag'))+num(val(r,'lag')))/2})).filter(r=>Number.isFinite(r.age)).sort((a,b)=>b.age-a.age);
       if(!rows.length){$('diversityMessage').textContent='PBDB gaf geen diversiteitsresultaten terug voor dit kaartgebied.';$('diversityEmpty').style.display='block';if(diversityChart){diversityChart.destroy();diversityChart=null;}return;}
       $('diversityEmpty').style.display='none';if(diversityChart)diversityChart.destroy();
@@ -1354,9 +1358,9 @@
     document.querySelectorAll('.view').forEach(view=>view.classList.remove('active'));
     $('view-' + name).classList.add('active');
     document.querySelectorAll('.nav button[data-view]').forEach(button=>button.classList.toggle('active',button.dataset.view===name));
-    const names={overview:'Overzicht',records:'Fossielvondsten',map:'Vindplaatsenkaart',timeline:'Geologische tijd'};
-    const titles={overview:'Ontdek de geschiedenis van het leven.',records:'Fossielvondsten',map:'Waar zijn fossielen gevonden?',timeline:'Leven door de geologische tijd.'};
-    const subs={overview:'Doorzoek fossielvondsten binnen het zichtbare kaartgebied.',records:'Doorzoek, sorteer en open de records uit het geladen kaartgebied.',map:'De kaart laadt alle fossielvindplaatsen in het zichtbare kaartgebied.',timeline:'Bekijk fossielvondsten door de geologische tijd.'};
+    const names={overview:'Overzicht',records:'Fossielvondsten',map:'Vindplaatsenkaart',timeline:'Geologische tijd',taxa:'Taxonomie',diversity:'Diversiteitsanalyse'};
+    const titles={overview:'Ontdek de geschiedenis van het leven.',records:'Fossielvondsten',map:'Waar zijn fossielen gevonden?',timeline:'Leven door de geologische tijd.',taxa:'Verken de taxonomische boom.',diversity:'Bekijk diversiteit door de geologische tijd.'};
+    const subs={overview:'Collectie- en occurrence-samenvatting voor het huidige kaartgebied.',records:'Doorzoek, sorteer en open occurrence-records uit het huidige kaartgebied.',map:'PBDB-clusters bij uitzoomen · echte collecties bij inzoomen.',timeline:'Selecteer geologische intervallen en bekijk de tijdschaal.',taxa:'Zoek taxa, open taxondetails en bekijk synoniemen en subtaxa.',diversity:'PBDB-diversiteitscurves en meest voorkomende taxa voor het huidige kaartvenster.'};
     $('crumbCurrent').textContent=names[name];
     $('pageTitle').textContent=titles[name];
     $('pageSubtitle').textContent=subs[name];
