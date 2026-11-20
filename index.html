@@ -340,6 +340,8 @@
   let collectionCache = [];
   let timeScaleRecords = [];
   let selectedTaxonRecord = null;
+  let taxonBrowserResultRows = [];
+  let taxonChildrenResultRows = [];
   let diversityChart = null;
 
   // Coordinate bins let the renderer inspect only records near the current viewport.
@@ -1304,8 +1306,57 @@
     requestMapCanvasPaint();
   }
 
+  async function initTimeScale() {
+    const nodes=[$('mapPeriodStrip'),$('timeScaleBrowser')];nodes.forEach(node=>{if(node)node.innerHTML='<span class="feature-muted">PBDB-tijdschaal ophalen…</span>';});
+    try {const p=new URLSearchParams({scale:'1',order:'age.desc',max_ma:'4100',vocab:'pbdb'});const response=await fetch(API+'/intervals/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json();timeScaleRecords=Array.isArray(json.records)?json.records:[];renderTimeScale();}
+    catch(error){nodes.forEach(node=>{if(node)node.textContent='Tijdschaal niet beschikbaar: '+error.message;});}
+  }
+  function renderTimeScale() {
+    const rows=timeScaleRecords.filter(item=>['era','period'].includes(String(val(item,'itp','interval_type')).toLowerCase())).sort((a,b)=>(num(val(b,'eag'))||0)-(num(val(a,'eag'))||0));
+    const content='<button type="button" class="period-chip" data-interval-name="">Alle tijden<small>Geen tijdfilter</small></button>'+rows.map(item=>{const name=first(val(item,'nam','name'),'Onbekend'),age=num(val(item,'eag')),colour=first(val(item,'col','color'),'#eaf3f1');return `<button type="button" class="period-chip" data-interval-name="${esc(name)}" style="border-left:4px solid ${esc(colour)}"><span>${esc(name)}</span><small>${age===null?'':numFormat(age)+' Ma oud'}</small></button>`;}).join('');
+    nodesTimeScale().forEach(node=>{if(node)node.innerHTML=content;});
+  }
+  function nodesTimeScale(){return [$('mapPeriodStrip'),$('timeScaleBrowser')];}
+  function chooseTimeInterval(name){$('intervalInput').value=name;switchView('map');runSearch();}
+  function taxonMessage(message,isError=false){$('taxaBrowserMessage').textContent=message;$('taxaBrowserMessage').style.color=isError?'#a34c4c':'';}
+  async function searchTaxonBrowser(query){
+    if(!query.trim())return;taxonMessage('Taxon zoeken…');$('taxaBrowserResults').innerHTML='';$('taxonDetails').innerHTML='<div class="feature-muted">Taxonomische gegevens ophalen…</div>';
+    try{const p=new URLSearchParams({name:query.trim(),status:'all',show:'attr,app,size',vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];
+      if(!rows.length){taxonMessage('Geen taxon met deze naam gevonden.',true);return;}taxonMessage(fmt(rows.length)+' resultaten · selecteer de juiste naam.');
+      taxonBrowserResultRows=rows;$('taxaBrowserResults').innerHTML=rows.slice(0,30).map((item,index)=>`<button class="feature-row" type="button" data-taxon-result="${index}"><span><strong>${esc(item.nam||'Onbekend')}</strong><small>${esc(item.rnk||'Taxon')} · ${esc(item.oid||'')}</small></span><span>Open →</span></button>`).join('');if(rows.length===1)await loadTaxonDetails(rows[0]);
+    }catch(error){taxonMessage('Taxonomie ophalen mislukt: '+error.message,true);}
+  }
+  async function loadTaxonDetails(taxon){
+    selectedTaxonRecord=taxon;
+    $('taxonDetails').innerHTML=`<h2 style="font:800 17px Manrope,sans-serif;margin:0 0 6px">${esc(taxon.nam||'Taxon')}</h2><div class="feature-muted">${esc(taxon.rnk||'Taxon')} · ${esc(taxon.oid||'')}</div><div class="feature-form" style="margin-top:12px"><button class="btn primary" id="applyTaxonFilter" type="button">Toon op kaart</button><button class="btn" id="loadTaxonSynonyms" type="button">Synoniemen</button><button class="btn" id="loadTaxonChildren" type="button">Subtaxa</button></div><div id="taxonHierarchy" class="feature-muted">Taxonomische details ophalen…</div><div id="taxonChildren" class="feature-list" style="margin-top:10px"></div>`;
+    $('applyTaxonFilter').addEventListener('click',()=>{$('taxonInput').value=taxon.nam||'';switchView('map');runSearch();});$('loadTaxonSynonyms').addEventListener('click',()=>loadTaxonRelated(taxon,'synonyms'));$('loadTaxonChildren').addEventListener('click',()=>loadTaxonChildren(taxon,0));
+    try{const p=new URLSearchParams({id:taxon.oid,show:'attr,nav,size',vocab:'pbdb'});const response=await fetch(API+'/taxa/single.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),detail=json.records?.[0]||taxon;$('taxonHierarchy').innerHTML=`<div class="feature-muted">${esc(val(detail,'att','author')||'Attributie niet beschikbaar')}</div><div class="feature-muted" style="margin-top:5px">PBDB-id: ${esc(detail.oid||taxon.oid||'—')}</div>`;}catch(error){$('taxonHierarchy').textContent='Extra details niet beschikbaar: '+error.message;}
+  }
+  async function loadTaxonRelated(taxon,relation){
+    const target=$('taxonChildren');target.innerHTML='Gegevens ophalen…';
+    try{const p=new URLSearchParams({id:taxon.oid,rel:relation,limit:'100',show:'attr',vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];target.innerHTML=rows.length?rows.map(item=>`<div class="feature-row"><span><strong>${esc(item.nam||'')}</strong><small>${esc(item.rnk||'')} · ${esc(item.oid||'')}</small></span></div>`).join(''):'<div class="feature-muted">Geen synoniemen geretourneerd.</div>';}catch(error){target.textContent='Synoniemen niet beschikbaar: '+error.message;}
+  }
+  async function loadTaxonChildren(taxon,offset=0){
+    const target=$('taxonChildren');target.innerHTML='<div class="feature-muted">Subtaxa ophalen…</div>';
+    try{const p=new URLSearchParams({id:taxon.oid,rel:'all_children',show:'size',limit:'100',offset:String(offset),vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];taxonChildrenResultRows=rows;target.innerHTML=rows.map((item,index)=>`<button class="feature-row" type="button" data-child-index="${index}"><span><strong>${esc(item.nam||'')}</strong><small>${esc(item.rnk||'Taxon')} · ${fmt(num(item.siz)||0)} subtaxa</small></span><span>Open →</span></button>`).join('')+(rows.length===100?'<button class="btn" type="button" id="moreTaxonChildren">Laad volgende 100 subtaxa</button>':'');const more=$('moreTaxonChildren');if(more)more.addEventListener('click',()=>loadTaxonChildren(taxon,offset+100));}catch(error){target.textContent='Subtaxa niet beschikbaar: '+error.message;}
+  }
+  async function loadDiversity(){
+    if(!map){$('diversityMessage').textContent='Open de kaart eerst om een kaartgebied te kiezen.';return;}$('diversityMessage').textContent='PBDB-diversiteitscurve ophalen…';
+    const b=getViewportQueryBounds(),f=currentFilters(),p=new URLSearchParams({count:$('diversityCount').value,time_reso:$('diversityResolution').value,vocab:'pbdb',lngmin:String(b.west),lngmax:String(b.east),latmin:String(b.south),latmax:String(b.north)});
+    if(f.taxon)p.set('base_name',f.taxon);if(f.interval)p.set('interval',f.interval);if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
+    try{const response=await fetch(API+'/occs/quickdiv.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=(json.records||[]).map(r=>({...r,total:num(val(r,'dsb','total'))||0,age:(num(val(r,'eag'))+num(val(r,'lag')))/2})).filter(r=>Number.isFinite(r.age)).sort((a,b)=>b.age-a.age);
+      if(!rows.length){$('diversityMessage').textContent='PBDB gaf geen diversiteitsresultaten terug voor dit kaartgebied.';$('diversityEmpty').style.display='block';if(diversityChart){diversityChart.destroy();diversityChart=null;}return;}
+      $('diversityEmpty').style.display='none';if(diversityChart)diversityChart.destroy();
+      diversityChart=new Chart($('diversityChart').getContext('2d'),{type:'line',data:{labels:rows.map(r=>first(val(r,'nam','interval'),numFormat(r.age)+' Ma')),datasets:[{label:$('diversityCount').selectedOptions[0].textContent,data:rows.map(r=>r.total),borderColor:'#188f84',backgroundColor:'rgba(24,143,132,.15)',fill:true,tension:.25,pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw)+' '+$('diversityCount').value}}},scales:{x:{ticks:{maxRotation:45,minRotation:0,autoSkip:true}},y:{beginAtZero:true,title:{display:true,text:'PBDB diversiteitsmaat'}}}}});
+      $('diversityMessage').textContent=fmt(rows.length)+' tijdsintervallen · '+$('diversityResolution').selectedOptions[0].textContent+' · huidige kaartuitsnede.';
+    }catch(error){$('diversityMessage').textContent='PBDB quickdiv niet beschikbaar: '+error.message;}
+  }
+  async function loadPrevalence(){
+    const b=getViewportQueryBounds(),p=new URLSearchParams({limit:'10',vocab:'pbdb',lngmin:String(b.west),lngmax:String(b.east),latmin:String(b.south),latmax:String(b.north)});$('prevalenceList').innerHTML='<div class="feature-muted">Taxa ophalen…</div>';
+    try{const response=await fetch(API+'/occs/prevalence.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];$('prevalenceList').innerHTML=rows.length?rows.map(item=>`<button class="feature-row" type="button" data-prevalence-taxon="${esc(item.nam||'')}"><span><strong>${esc(item.nam||'Onbekend taxon')}</strong><small>Meest voorkomend in kaartgebied</small></span><b>${fmt(num(item.noc)||0)}</b></button>`).join(''):'<div class="feature-muted">Geen prevalentiegegevens beschikbaar.</div>';}catch(error){$('prevalenceList').textContent='Prevalentie niet beschikbaar: '+error.message;}
+  }
   function switchView(name) {
-    const allowed = ['overview','records','map','timeline'];
+    const allowed = ['overview','records','map','timeline','taxa','diversity'];
     if (!allowed.includes(name)) name = 'map';
     document.querySelectorAll('.view').forEach(view=>view.classList.remove('active'));
     $('view-' + name).classList.add('active');
@@ -1327,13 +1378,17 @@
     } else if (name==='overview') {
       summaryStats(); renderCharts(); renderRecent();
     } else if (name==='records') {
-      renderRecordTable();
+      if(records.length)renderRecordTable();else loadViewportRecords({reason:'records',useCache:true});
     } else if (name==='timeline') {
       renderCharts();
+    } else if (name==='taxa') {
+      $('taxaBrowserInput').focus();
+    } else if (name==='diversity') {
+      loadDiversity();loadPrevalence();
     }
     $('sidebar').classList.remove('open');
   }
-  function resetFilters(){['taxonInput','intervalInput','oldestInput','youngestInput'].forEach(id=>$(id).value='');$('regionInput').value='';clearNotice();runSearch();}
+  function resetFilters(){['taxonInput','intervalInput','oldestInput','youngestInput','stratigraphyInput','authorizerInput','refAuthorInput'].forEach(id=>$(id).value='');$('regionInput').value='';clearNotice();runSearch();}
   // Navigation and controls
   document.querySelectorAll('.nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
   document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.goto)));
@@ -1362,6 +1417,13 @@
     }
   });
   $('mapSearchResults').addEventListener('click',event=>{const placeButton=event.target.closest('[data-place-index]');if(placeButton){selectMapPlace(Number(placeButton.dataset.placeIndex));return;}const recordButton=event.target.closest('[data-record-index]');if(recordButton)selectMapRecord(Number(recordButton.dataset.recordIndex));});
+  $('taxaBrowserForm').addEventListener('submit',event=>{event.preventDefault();searchTaxonBrowser($('taxaBrowserInput').value);});
+  $('taxaBrowserResults').addEventListener('click',event=>{const b=event.target.closest('[data-taxon-result]');if(b)loadTaxonDetails(taxonBrowserResultRows[Number(b.dataset.taxonResult)]);});
+  $('taxonDetails').addEventListener('click',event=>{const b=event.target.closest('[data-child-index]');if(b)loadTaxonDetails(taxonChildrenResultRows[Number(b.dataset.childIndex)]);});
+  $('mapPeriodStrip').addEventListener('click',event=>{const b=event.target.closest('[data-interval-name]');if(b)chooseTimeInterval(b.dataset.intervalName);});
+  $('timeScaleBrowser').addEventListener('click',event=>{const b=event.target.closest('[data-interval-name]');if(b)chooseTimeInterval(b.dataset.intervalName);});
+  $('loadDiversityButton').addEventListener('click',loadDiversity);$('loadPrevalenceButton').addEventListener('click',loadPrevalence);
+  $('prevalenceList').addEventListener('click',event=>{const b=event.target.closest('[data-prevalence-taxon]');if(b){$('taxonInput').value=b.dataset.prevalenceTaxon;switchView('map');runSearch();}});
   $('mobileMenu').addEventListener('click',()=>$('sidebar').classList.toggle('open'));
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
     $('taxonInput').value=b.dataset.preset; $('intervalInput').value=b.dataset.interval||''; $('regionInput').value=''; $('oldestInput').value=''; $('youngestInput').value='';
@@ -1371,6 +1433,7 @@
   // The minimum zoom is based on the former Canada-wide map scale, not its location.
   renderAll();
   switchView('map');
+  initTimeScale();
   setTimeout(() => {
     if (!map || hasAutoLoadedMap) return;
     map.invalidateSize({ pan: false });
