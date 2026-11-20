@@ -571,6 +571,66 @@
     $('statRecordsNote').textContent=note || `${fmt(incoming.length)} records geladen uit PBDB voor dit kaartgebied`;
     $('recordsDescription').textContent=`${fmt(filteredRecords.length)} geladen records · huidig kaartgebied · bron: officiële PBDB API`;
   }
+  function collectionId(r){return first(r.oid,r.collection_no,r.collection_id,'');}
+  function collectionLat(r,paleo=false){return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
+  function collectionLng(r,paleo=false){return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
+  function collectionOccurrences(r){return num(val(r,'noc','nocc','occurrences'))||0;}
+  function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
+  function buildCollectionApiUrl(filters,bounds){
+    const p=new URLSearchParams({limit:'all',show:'loc,time,strat,geo,lith,ref,entname,prot,paleoloc',vocab:'pbdb'});
+    if(filters.taxon)p.set('base_name',filters.taxon);if(filters.interval)p.set('interval',filters.interval);if(filters.region)p.set('cc',filters.region);
+    if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
+    if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);
+    if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
+    p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));p.set('rowcount','');
+    return API+'/colls/list.json?'+p.toString();
+  }
+  function cacheCollectionArea(filtersKey,bounds,records){
+    collectionCache=collectionCache.filter(e=>!(e.filtersKey===filtersKey&&sameBounds(e.bounds,bounds)));
+    collectionCache.unshift({filtersKey,bounds:{...bounds},records:records.slice(),complete:true,savedAt:Date.now()});
+    while(collectionCache.length>6||collectionCache.reduce((s,e)=>s+e.records.length,0)>80000)collectionCache.pop();
+  }
+  function readCollectionCache(filtersKey,bounds){
+    const exact=collectionCache.findIndex(e=>e.filtersKey===filtersKey&&sameBounds(e.bounds,bounds));
+    if(exact>=0){const e=collectionCache.splice(exact,1)[0];collectionCache.unshift(e);return e.records.slice();}
+    const cover=collectionCache.findIndex(e=>e.filtersKey===filtersKey&&e.complete&&boundsContain(e.bounds,bounds));
+    if(cover<0)return null;const e=collectionCache.splice(cover,1)[0];collectionCache.unshift(e);
+    return e.records.filter(r=>boundsContainCoordinate(bounds,collectionLat(r),collectionLng(r)));
+  }
+  function boundsContainCoordinate(bounds,lat,lng){
+    if(lat===null||lng===null)return false;const x=normalizeLongitude(lng);
+    const inside=bounds.west<=bounds.east?((x>=bounds.west&&x<=bounds.east)||(bounds.east>=180&&x===-180)):(x>=bounds.west||x<=bounds.east);
+    return lat>=bounds.south&&lat<=bounds.north&&inside;
+  }
+  function buildCollectionSpatialIndex(incoming){
+    const index={modern:new Map(),paleo:new Map()};
+    const add=(mode,r,lat,lng)=>{if(lat===null||lng===null||Math.abs(lat)>90||Math.abs(lng)>360)return;const x=normalizeLongitude(lng),key=`${Math.floor(lat/SPATIAL_CELL_DEGREES)}:${Math.floor(x/SPATIAL_CELL_DEGREES)}`;if(!index[mode].has(key))index[mode].set(key,[]);index[mode].get(key).push({record:r,lat,lng:x});};
+    for(const r of incoming){add('modern',r,collectionLat(r),collectionLng(r));add('paleo',r,collectionLat(r,true),collectionLng(r,true));}
+    collectionSpatialIndex=index;
+  }
+  function queryCollectionSpatialIndex(bounds,paleo=false){
+    const index=collectionSpatialIndex[paleo?'paleo':'modern'],out=[],seen=new Set(),minLat=Math.floor(bounds.south/SPATIAL_CELL_DEGREES),maxLat=Math.floor(bounds.north/SPATIAL_CELL_DEGREES);
+    for(const [west,east] of longitudeSegments(bounds.west,bounds.east)){const minLng=Math.floor(west/SPATIAL_CELL_DEGREES),maxLng=Math.floor(east/SPATIAL_CELL_DEGREES),cells=new Set();for(let n=minLng;n<=maxLng;n++)cells.add(n);if(west<=-180||east>=180)cells.add(Math.floor(-180/SPATIAL_CELL_DEGREES));
+      for(let latCell=minLat;latCell<=maxLat;latCell++)for(const lngCell of cells)for(const entry of index.get(`${latCell}:${lngCell}`)||[]){if(seen.has(entry.record))continue;seen.add(entry.record);if(boundsContainCoordinate(bounds,entry.lat,entry.lng))out.push(entry);}
+    }return out;
+  }
+  function setMapCollections(incoming){
+    const seen=new Set();mapCollections=incoming.filter(r=>{const id=collectionId(r);if(id&&seen.has(id))return false;if(id)seen.add(id);return collectionLat(r)!==null&&collectionLng(r)!==null;});
+    buildCollectionSpatialIndex(mapCollections);requestMapCanvasPaint();
+    $('mapAreaStatus').textContent=fmt(mapCollections.length)+' collecties · '+fmt(mapCollections.reduce((s,r)=>s+collectionOccurrences(r),0))+' occurrences';
+  }
+  async function loadViewportCollections({useCache=true}={}){
+    const filters=currentFilters(),bounds=getViewportQueryBounds(),key=JSON.stringify(filters);
+    if(activeCollectionController){activeCollectionController.abort();activeCollectionController=null;}
+    if(useCache){const cached=readCollectionCache(key,bounds);if(cached){setMapCollections(cached);setStatus('Collecties uit cache');return cached;}}
+    const controller=new AbortController();activeCollectionController=controller;$('mapAreaStatus').textContent='PBDB-collecties ophalen…';
+    const timeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},60000);
+    try{const response=await fetch(buildCollectionApiUrl(filters,bounds),{headers:{'Accept':'application/json'},signal:controller.signal});if(!response.ok)throw new Error('PBDB collecties gaf HTTP '+response.status);
+      const json=await response.json();if(json.error)throw new Error(typeof json.error==='string'?json.error:'PBDB kon collecties niet ophalen.');if(!Array.isArray(json.records))throw new Error('PBDB stuurde geen geldige collectielijst terug.');
+      if(activeCollectionController!==controller)return;setMapCollections(json.records);cacheCollectionArea(key,bounds,mapCollections);setStatus('Collecties live opgehaald');return mapCollections;
+    }catch(error){if(activeCollectionController!==controller)return;if(error.name==='AbortError'){if(controller.timedOut){$('mapAreaStatus').textContent='Collectieaanvraag duurde langer dan 60 seconden';notice('PBDB reageerde niet binnen 60 seconden. Zoom iets verder in en probeer opnieuw.','error');}}else{setStatus('PBDB collecties niet bereikbaar',false);$('mapAreaStatus').textContent='Collecties konden niet worden opgehaald';notice(error.message,'error');}}
+    finally{clearTimeout(timeout);if(activeCollectionController===controller)activeCollectionController=null;}
+  }
   function runSearch() {
     const f=currentFilters();
     if(f.oldest && f.youngest && Number(f.oldest)<Number(f.youngest)) {
@@ -584,7 +644,9 @@
       notice('Nieuwe gebieden worden opgehaald op basis van moderne kaartcoördinaten. De kaart is daarom teruggezet naar moderne coördinaten.');
     }
     hasActiveQuery=true;
-    return loadViewportRecords({ reason: 'search' });
+    const collectionPromise=loadViewportCollections({useCache:false});
+    if($('view-records').classList.contains('active'))return Promise.all([collectionPromise,loadViewportRecords({reason:'search',useCache:false})]);
+    return collectionPromise;
   }
   async function loadViewportRecords({ reason='map', useCache=true } = {}) {
     const filters=currentFilters();
@@ -682,7 +744,7 @@
     if(!hasActiveQuery || !map || mapMode==='paleo') return;
     clearTimeout(mapMoveTimer);
     setMapAreaStatus('Kaart verplaatst · nieuw zichtbaar gebied wordt opgehaald…');
-    mapMoveTimer=setTimeout(()=>loadViewportRecords({reason:'map'}),120);
+    mapMoveTimer=setTimeout(()=>{loadViewportCollections({useCache:true});if($('view-records').classList.contains('active'))loadViewportRecords({reason:'map'});},160);
   }
   function uniqueCount(arr, fn) { const s=new Set(); arr.forEach(r=>{const v=fn(r);if(v!==''&&v!==null&&v!==undefined)s.add(String(v));}); return s.size; }
   function summaryStats() {
@@ -1015,9 +1077,9 @@
       map.on('resize viewreset zoomend moveend', requestMapCanvasPaint);
       // Stop the previous-area request as soon as the user starts moving the map.
       map.on('movestart zoomstart', () => {
-        if (!hasActiveQuery || !activeSearchController) return;
-        activeSearchController.abort();
-        activeSearchController = null;
+        if(!hasActiveQuery)return;
+        if(activeSearchController){activeSearchController.abort();activeSearchController=null;}
+        if(activeCollectionController){activeCollectionController.abort();activeCollectionController=null;}
         loading(false);
         setMapAreaStatus('Kaart beweegt · oude aanvraag gestopt; nieuw gebied volgt zodra je loslaat');
       });
@@ -1304,7 +1366,7 @@
     hasAutoLoadedMap = true;
     hasActiveQuery = true;
     requestMapCanvasPaint();
-    loadViewportRecords({ reason: 'initial' });
+    loadViewportCollections({useCache:false});
   }, 180);
 })();
 </script>
