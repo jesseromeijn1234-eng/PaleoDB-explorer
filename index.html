@@ -258,7 +258,7 @@
             <div class="map-search-form" role="search">
               <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een stad, dorp, land, fossiel, formatie of record-ID…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
               <button class="btn primary" id="mapSearchButton" type="button">Zoeken</button>
-              <button class="btn" id="mapSearchClear" type="button">Wissen</button>
+              <button class="btn" id="mapSearchClear" type="button">Wissen</button><button class="btn" id="toggleFiltersButton" type="button" aria-expanded="false">Filters</button>
             </div>
             <div class="map-search-help">Zoekt plaatsnamen én doorzoekt de geladen fossielstipjes. Geen automatische suggesties: zoeken start pas wanneer je op Enter of Zoeken klikt.</div>
           </div>
@@ -1031,35 +1031,48 @@
       requestMapCanvasPaint();
       return;
     }
+    if ($('mapSearchButton').disabled) return;
     const sequence = ++mapSearchSequence;
     $('mapSearchButton').disabled = true;
     $('mapSearchButton').textContent = 'Zoeken…';
     $('mapSearchResults').hidden = false;
     $('mapSearchResults').innerHTML = '<div class="map-search-empty">Plaatsen en fossielen zoeken…</div>';
-    const matches = findLoadedRecordMatches(query);
     let places = [];
+    let matches = findLoadedRecordMatches(query);
     let placeError = '';
     try {
-      places = await geocodeMapQuery(query);
-    } catch (error) {
-      placeError = error.message || 'Plaats zoeken is tijdelijk niet beschikbaar.';
-    }
-    if (sequence !== mapSearchSequence) return;
-    mapPlaceSearchResults = places;
-    mapSearchMatchedKeys = matches.length ? new Set(matches.map(mapRecordKey)) : null;
-    requestMapCanvasPaint();
+      try {
+        places = await geocodeMapQuery(query);
+      } catch (error) {
+        placeError = error.message || 'Plaats zoeken is tijdelijk niet beschikbaar.';
+      }
+      if (sequence !== mapSearchSequence) return;
 
-    if (!places.length && !matches.length) {
-      renderMapSearchResults(query, [], [], placeError || 'Geen plaats gevonden. PBDB wordt nu op dit woord/taxon doorzocht binnen het zichtbare kaartgebied.');
-      $('taxonInput').value = query;
-      runSearch();
-    } else {
-      const message = placeError ? `${placeError} De geladen fossielresultaten zijn wel doorzocht.` : 'Kies een plaats om de kaart te verplaatsen, of een fossiel om de bijbehorende stip te markeren.';
+      // If neither a place nor a loaded fossil matches, ask PBDB for this taxon
+      // in the current viewport and wait for the results before showing the list.
+      if (!places.length && !matches.length) {
+        $('taxonInput').value = query;
+        await runSearch();
+        if (sequence !== mapSearchSequence) return;
+        matches = findLoadedRecordMatches(query);
+      }
+
+      mapPlaceSearchResults = places;
+      mapSearchMatchedKeys = matches.length ? new Set(matches.map(mapRecordKey)) : null;
+      requestMapCanvasPaint();
+      let message = 'Kies een plaats om de kaart te verplaatsen, of een fossiel om de bijbehorende stip te markeren.';
+      if (placeError) message = 'Plaatszoeken is tijdelijk niet beschikbaar. PBDB-resultaten zijn wel doorzocht.';
+      else if (!places.length && !matches.length) message = 'Geen plaats of fossiel gevonden in het huidige kaartgebied.';
       renderMapSearchResults(query, places, matches, message);
-      if (matches.length) setMapAreaStatus(`${fmt(matches.length)} overeenkomende fossielrecords gemarkeerd`);
+      if (matches.length) setMapAreaStatus(fmt(matches.length) + ' overeenkomende fossielrecords gemarkeerd');
+    } catch (error) {
+      if (sequence === mapSearchSequence) renderMapSearchResults(query, places, matches, error.message || 'Zoeken is mislukt. Probeer het opnieuw.');
+    } finally {
+      if (sequence === mapSearchSequence) {
+        $('mapSearchButton').disabled = false;
+        $('mapSearchButton').textContent = 'Zoeken';
+      }
     }
-    $('mapSearchButton').disabled = false;
-    $('mapSearchButton').textContent = 'Zoeken';
   }
   function selectMapPlace(index) {
     const place = mapPlaceSearchResults[index];
@@ -1104,13 +1117,33 @@
   }
 
   function switchView(name) {
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view-${name}`).classList.add('active');
-    document.querySelectorAll('.nav button[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+    const allowed = ['overview','records','map','timeline'];
+    if (!allowed.includes(name)) name = 'map';
+    document.querySelectorAll('.view').forEach(view=>view.classList.remove('active'));
+    $('view-' + name).classList.add('active');
+    document.querySelectorAll('.nav button[data-view]').forEach(button=>button.classList.toggle('active',button.dataset.view===name));
     const names={overview:'Overzicht',records:'Fossielvondsten',map:'Vindplaatsenkaart',timeline:'Geologische tijd'};
     const titles={overview:'Ontdek de geschiedenis van het leven.',records:'Fossielvondsten',map:'Waar zijn fossielen gevonden?',timeline:'Leven door de geologische tijd.'};
-    const subs={overview:'Doorzoek fossielvondsten binnen het zichtbare kaartgebied.',records:'Doorzoek, sorteer en open de records uit het geladen kaartgebied.',map:'De kaart laadt automatisch alleen fossielvindplaatsen in het zichtbare kaartgebied.',timeline:'Bekijk hoe fossielvondsten uit het geladen kaartgebied verdeeld zijn over miljoenen jaren.'};
-    $('crumbCurrent').textContent=names[name];$('pageTitle').textContent=titles[name];$('pageSubtitle').textContent=subs[name];
-    if(name==='map')renderMap(); if(name==='records')renderRecordTable(); $('sidebar').classList.remove('open');
+    const subs={overview:'Doorzoek fossielvondsten binnen het zichtbare kaartgebied.',records:'Doorzoek, sorteer en open de records uit het geladen kaartgebied.',map:'De kaart laadt automatisch alleen fossielvindplaatsen in het zichtbare kaartgebied.',timeline:'Bekijk fossielvondsten door de geologische tijd.'};
+    $('crumbCurrent').textContent=names[name];
+    $('pageTitle').textContent=titles[name];
+    $('pageSubtitle').textContent=subs[name];
+    const content=document.querySelector('.content');
+    content.classList.toggle('map-focused',name==='map');
+    if (name==='map') {
+      content.classList.remove('filters-open');
+      $('toggleFiltersButton').setAttribute('aria-expanded','false');
+      $('toggleFiltersButton').textContent='Filters';
+      renderMap();
+      setTimeout(()=>{if(map){map.invalidateSize({pan:false});updateMapZoomFloor();requestMapCanvasPaint();}},50);
+    } else if (name==='overview') {
+      summaryStats(); renderCharts(); renderRecent();
+    } else if (name==='records') {
+      renderRecordTable();
+    } else if (name==='timeline') {
+      renderCharts();
+    }
+    $('sidebar').classList.remove('open');
   }
   function resetFilters(){['taxonInput','intervalInput','oldestInput','youngestInput'].forEach(id=>$(id).value='');$('regionInput').value='';clearNotice();runSearch();}
   // Navigation and controls
@@ -1124,6 +1157,22 @@
   $('detailModal').addEventListener('click',e=>{if(e.target===$('detailModal'))$('detailModal').classList.remove('open');});$('helpModal').addEventListener('click',e=>{if(e.target===$('helpModal'))$('helpModal').classList.remove('open');});
   $('modernMapBtn').addEventListener('click',()=>{mapMode='modern';$('modernMapBtn').classList.add('active');$('paleoMapBtn').classList.remove('active');renderMap();});$('paleoMapBtn').addEventListener('click',()=>{mapMode='paleo';$('paleoMapBtn').classList.add('active');$('modernMapBtn').classList.remove('active');renderMap();});
   $('mapSearchButton').addEventListener('click',runMapSearch);$('mapSearchClear').addEventListener('click',clearMapSearch);$('mapSearchInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();runMapSearch();}});
+  $('toggleFiltersButton').addEventListener('click',()=>{
+    const content=document.querySelector('.content');
+    const open=content.classList.toggle('filters-open');
+    $('toggleFiltersButton').setAttribute('aria-expanded',String(open));
+    $('toggleFiltersButton').textContent=open?'Filters verbergen':'Filters';
+    if(open) $('taxonInput').focus();
+  });
+  window.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+      event.preventDefault(); $('mapSearchInput').focus(); $('mapSearchInput').select();
+    }
+    if(event.key==='Escape'){
+      if($('detailModal').classList.contains('open')) $('detailModal').classList.remove('open');
+      if($('helpModal').classList.contains('open')) $('helpModal').classList.remove('open');
+    }
+  });
   $('mapSearchResults').addEventListener('click',event=>{const placeButton=event.target.closest('[data-place-index]');if(placeButton){selectMapPlace(Number(placeButton.dataset.placeIndex));return;}const recordButton=event.target.closest('[data-record-index]');if(recordButton)selectMapRecord(Number(recordButton.dataset.recordIndex));});
   $('mobileMenu').addEventListener('click',()=>$('sidebar').classList.toggle('open'));
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
