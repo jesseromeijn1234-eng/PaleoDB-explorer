@@ -1186,6 +1186,7 @@
     const collection=mapCollectionSearchResults[index];if(!collection)return;
     const lat=collectionLat(collection,mapMode==='paleo'),lng=collectionLng(collection,mapMode==='paleo');if(lat===null||lng===null)return;
     map.flyTo([lat,lng],Math.max(13,map.getZoom()),{duration:.55});
+    if(mapCollectionMode==='summary'){openSummaryBin(collection);return;}
     L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);
   }
   async function geocodeMapQuery(query) {
