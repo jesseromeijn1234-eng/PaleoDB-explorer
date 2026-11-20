@@ -93,6 +93,13 @@
     .collection-occ-list small { color:#8492a0; display:block; margin-top:2px; }
     .map-age-legend { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:10px; color:#8290a0; }
     .age-swatch { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:4px; }
+    .map-extra-controls { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:12px; padding:11px 15px; border-bottom:1px solid #edf0f3; background:#fbfcfd; }
+    .map-saved-controls,.map-gplates-controls { display:flex; flex-wrap:wrap; align-items:center; gap:7px; min-width:0; }
+    .map-saved-controls strong,.map-gplates-controls strong { width:100%; color:#617287; font-size:10px; }
+    .map-extra-controls select,.map-extra-controls input { height:33px; min-width:80px; border:1px solid #e2e8ed; border-radius:8px; padding:0 8px; background:#fff; color:#34485d; font-size:10px; }
+    .map-gplates-controls label { color:#8290a0; font-size:10px; }
+    .map-extra-controls .feature-muted { font-size:9px; }
+    @media (max-width:800px) { .map-extra-controls {grid-template-columns:1fr;} }
     @media (max-width: 800px) { .feature-grid{grid-template-columns:1fr}.filters-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
     .field label { display:block; color:#718095; font-size:10px; font-weight:700; letter-spacing:.55px; text-transform:uppercase; margin:0 0 7px 2px; }
     .field input, .field select { height:40px; width:100%; padding:0 11px; border:1px solid #e2e8ed; border-radius:9px; color:#26394d; background:#fbfcfd; outline:none; font-size:12px; min-width:0; }
@@ -294,6 +301,10 @@
           </div>
           <div class="map-search-results" id="mapSearchResults" hidden aria-live="polite"></div>
           <div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Geologische tijd wordt geladen…</span></div>
+          <div class="map-extra-controls">
+            <div class="map-saved-controls"><strong>Opgeslagen gebieden op dit apparaat</strong><select id="savedMapViews" aria-label="Opgeslagen kaartgebieden"><option value="">Kies een gebied…</option></select><button class="btn small" id="saveMapViewButton" type="button">Bewaar huidige kaart</button><button class="btn small" id="deleteMapViewButton" type="button">Verwijder</button></div>
+            <div class="map-gplates-controls"><strong>GPlates paleogeografische reconstructie</strong><label for="gplatesAgeInput">Ouderdom (Ma)</label><input id="gplatesAgeInput" type="number" min="0" max="1100" step="1" value="100"><label for="gplatesModel">Model</label><select id="gplatesModel"><option value="ZAHIROVIC2022">Zahirovic 2022</option><option value="PALEOMAP">PALEOMAP</option></select><button class="btn small primary" id="runGplatesButton" type="button">Reconstructeer</button><button class="btn small" id="resetGplatesButton" type="button">Terug naar nu</button><span id="gplatesStatus" class="feature-muted">Zoom in tot echte PBDB-collecties geladen zijn.</span></div>
+          </div>
           <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> PBDB-collectie / groep</span><span id="mapCount">0 collecties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
       </section>
 
@@ -337,6 +348,9 @@
   let mapHitBuckets = new Map();
   let mapCollections = [];
   let collectionSpatialIndex = new Map();
+  let gplatesCoordinates = new Map();
+  let gplatesReconstructionAge = null;
+  const SAVED_MAP_VIEWS_KEY = 'paleodb-explorer-saved-views-v1';
   let mapCollectionMode = 'collections';
   let mapCollectionSummaryLevel = null;
   let activeCollectionController = null;
