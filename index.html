@@ -282,7 +282,7 @@
       </section>
 
       <section class="view active" id="view-map">
-        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Noord-Holland als startgebied · alleen het zichtbare kaartgebied wordt opgehaald</p></div><div class="map-toolbar"><span class="tag map-limit-tag">MAX. UITZOOMEN: VASTE GRENS</span><div class="segmented"><button class="active" id="modernMapBtn">Moderne coördinaten</button><button id="paleoMapBtn">Paleocoördinaten</button></div></div></div>
+        <div class="panel map-panel"><div class="panel-head"><div><h2>Collecties op de kaart</h2><p>Noord-Holland als startgebied · collecties in het zichtbare kaartgebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">MAX. UITZOOMEN: VASTE GRENS</span><div class="segmented"><button class="active" id="modernMapBtn">Moderne coördinaten</button><button id="paleoMapBtn">PBDB paleocoördinaten</button></div></div></div>
           <div class="map-search-wrap">
             <div class="map-search-form" role="search">
               <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een stad, dorp, land, fossiel, formatie of record-ID…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
@@ -293,7 +293,7 @@
           </div>
           <div class="map-search-results" id="mapSearchResults" hidden aria-live="polite"></div>
           <div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Geologische tijd wordt geladen…</span></div>
-          <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> Fossielvindplaats</span><span id="mapCount">0 locaties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
+          <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> PBDB-collectie / groep</span><span id="mapCount">0 collecties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
       </section>
 
       <section class="view" id="view-timeline">
@@ -308,7 +308,7 @@
        </section>
        <section class="view" id="view-diversity">
          <div class="panel"><div class="panel-head"><div><h2>Diversiteitsanalyse</h2><p>PBDB quick-diversity voor het zichtbare kaartgebied en de gekozen filters.</p></div><span class="tag">PBDB QUICKDIV</span></div><div class="panel-body">
-           <div class="feature-form"><label class="feature-muted" for="diversityCount">Tellen als</label><select id="diversityCount"><option value="genera">Geslachten</option><option value="species">Soorten</option><option value="families">Families</option><option value="orders">Ordes</option></select><label class="feature-muted" for="diversityResolution">Tijdsresolutie</label><select id="diversityResolution"><option value="stage">Etappe / stage</option><option value="epoch">Tijdvak / epoch</option><option value="period">Periode</option></select><button class="btn primary" id="loadDiversityButton" type="button">Bereken diversiteit</button></div>
+           <div class="feature-form"><label class="feature-muted" for="diversityCount">Tellen als</label><select id="diversityCount"><option value="genera">Geslachten</option><option value="families">Families</option><option value="orders">Ordes</option></select><label class="feature-muted" for="diversityResolution">Tijdsresolutie</label><select id="diversityResolution"><option value="stage">Geologische etappes</option><option value="epoch">Epochs</option><option value="bin">Blokken van 10 miljoen jaar</option><option value="period">Perioden</option></select><button class="btn primary" id="loadDiversityButton" type="button">Bereken diversiteit</button></div>
            <div id="diversityMessage" class="feature-muted">De analyse gebruikt de grenzen van je huidige kaartvenster.</div>
            <div style="height:360px;position:relative;margin-top:12px"><canvas id="diversityChart"></canvas><div class="empty" id="diversityEmpty"><strong>Nog geen diversiteitsgegevens</strong><span>Kies Bereken diversiteit om de PBDB-curve op te halen.</span></div></div>
          </div></div>
@@ -417,7 +417,7 @@
     if (f.oldest) p.set('min_ma',f.oldest);
     if (f.youngest) p.set('max_ma',f.youngest);
     if (f.stratigraphy) p.set('strat',f.stratigraphy+' Fm');
-    if (f.authorizer && /^\\d+$/.test(f.authorizer)) p.set('occs_authent_by',f.authorizer);
+    if (f.authorizer && /^[0-9]+$/.test(f.authorizer)) p.set('occs_authent_by',f.authorizer);
     if (f.refAuthor) p.set('ref_author',f.refAuthor);
     if (bounds) {
       p.set('lngmin',String(bounds.west));
@@ -881,9 +881,9 @@
     const interval=[val(collection,'oei'),val(collection,'oli')].filter(Boolean).join(' – ')||'Tijdvak onbekend';
     const age=collectionAge(collection),formation=first(val(collection,'sfm','sgr','smb','formation'),'—');
     const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'ref','ref_author'),'Referentie niet beschikbaar');
-    node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> occurrences in deze collectie</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Laad occurrences</button><button type="button" class="collection-filter-name">Filter op taxon</button></div><div class="collection-occ-list" hidden></div>`;
+    node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> occurrences in deze collectie</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Laad occurrences</button><button type="button" class="collection-filter-name">Filter op formatie</button></div><div class="collection-occ-list" hidden></div>`;
     node.querySelector('.collection-load-occ').addEventListener('click',()=>loadCollectionOccurrences(collection,node.querySelector('.collection-occ-list')));
-    node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'nam','name'),'');$('taxonInput').value=name;switchView('map');runSearch();});
+    node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'sfm','sgr','smb','formation','stratigraphic_formation'),'');if(!name||name==='—'){notice('Voor deze collectie is geen formatie beschikbaar.');return;}$('stratigraphyInput').value=name;switchView('map');runSearch();});
     return node;
   }
   async function loadCollectionOccurrences(collection,container) {
