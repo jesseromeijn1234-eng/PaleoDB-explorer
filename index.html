@@ -564,7 +564,7 @@
     $('statRecordsNote').textContent=note || `${fmt(incoming.length)} records geladen uit PBDB voor dit kaartgebied`;
     $('recordsDescription').textContent=`${fmt(filteredRecords.length)} geladen records · huidig kaartgebied · bron: officiële PBDB API`;
   }
-  function collectionId(r){return first(r.oid,r.cxi,r.collection_no,r.collection_id,r.id,'');}
+  function collectionId(r){return first(r.oid,r.collection_no,r.collection_id,r.id,'');}
   function collectionRecordCount(r){return Math.max(1,num(val(r,'nco','collection_count'))||1);}
   function collectionLat(r,paleo=false){return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
   function collectionLng(r,paleo=false){return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
@@ -921,9 +921,9 @@
       const response=await fetch(API+'/colls/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
       const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];if(offset===0)container.innerHTML='';
       rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'PBDB-collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
-      const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
+      const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const oldCount=container.querySelector('[data-summary-count]');if(oldCount)oldCount.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
       if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreSummary='1';more.className='btn small';more.textContent='Laad 20 meer collecties';more.addEventListener('click',()=>{more.disabled=true;loadSummaryBinCollections(summaryRecord,container,shown);});container.appendChild(more);}
-      const count=document.createElement('div');count.className='meta';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' collecties.';container.prepend(count);
+      const count=document.createElement('div');count.className='meta';count.dataset.summaryCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' collecties.';container.prepend(count);
     }catch(error){container.textContent='Collecties konden niet worden geladen: '+error.message;}
   }
   function openSummaryBin(summaryRecord){
