@@ -336,6 +336,8 @@
   let mapHitBuckets = new Map();
   let mapCollections = [];
   let collectionSpatialIndex = new Map();
+  let mapCollectionMode = 'collections';
+  let mapCollectionSummaryLevel = null;
   let activeCollectionController = null;
   let collectionCache = [];
   let timeScaleRecords = [];
@@ -406,28 +408,17 @@
   const numFormat = v => v===null || v===undefined ? '—' : Number(v).toLocaleString('nl-NL',{maximumFractionDigits:1});
 
   function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim(), stratigraphy:$('stratigraphyInput').value.trim(), authorizer:$('authorizerInput').value.trim(), refAuthor:$('refAuthorInput').value.trim()}; }
-  function buildApiUrl(f, bounds=null) {
-    const p = new URLSearchParams();
-    p.set('vocab','pbdb');
-    p.set('limit',String(PBDB_REQUEST_LIMIT));
-    p.set('show',SHOW);
-    if (f.taxon) p.set('base_name',f.taxon);
-    if (f.interval) p.set('interval',f.interval);
-    if (f.region) p.set('cc',f.region);
-    if (f.oldest) p.set('min_ma',f.oldest);
-    if (f.youngest) p.set('max_ma',f.youngest);
-    if (f.stratigraphy) p.set('strat',f.stratigraphy+' Fm');
-    if (f.authorizer && /^[0-9]+$/.test(f.authorizer)) p.set('occs_authent_by',f.authorizer);
-    if (f.refAuthor) p.set('ref_author',f.refAuthor);
-    if (bounds) {
-      p.set('lngmin',String(bounds.west));
-      p.set('lngmax',String(bounds.east));
-      p.set('latmin',String(bounds.south));
-      p.set('latmax',String(bounds.north));
-    }
-    p.set('rowcount','');
-    return `${API}/occs/list.json?${p.toString()}`;
+  function intervalIdForName(name){const row=timeScaleRecords.find(item=>first(val(item,'nam','name'),'')===name);return row?String(val(row,'oid')).replace(/^int:/,''):'';}
+  function buildApiUrl(f,bounds=null){
+    const p=new URLSearchParams({vocab:'pbdb',limit:String(PBDB_REQUEST_LIMIT),show:SHOW});
+    if(f.taxon)p.set('base_name',f.taxon);
+    if(f.interval){const id=intervalIdForName(f.interval);if(id)p.set('interval_id',id);else p.set('interval',f.interval);}
+    if(f.region)p.set('cc',f.region);if(f.oldest)p.set('min_ma',f.oldest);if(f.youngest)p.set('max_ma',f.youngest);
+    if(f.stratigraphy)p.set('strat',f.stratigraphy+' Fm');if(f.authorizer&&/^[0-9]+$/.test(f.authorizer))p.set('occs_authent_by',f.authorizer);if(f.refAuthor)p.set('ref_author',f.refAuthor);
+    if(bounds){p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));}
+    p.set('rowcount','');return `${API}/occs/list.json?${p.toString()}`;
   }
+
   const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   function normalizeLongitude(value) {
@@ -573,20 +564,23 @@
     $('statRecordsNote').textContent=note || `${fmt(incoming.length)} records geladen uit PBDB voor dit kaartgebied`;
     $('recordsDescription').textContent=`${fmt(filteredRecords.length)} geladen records · huidig kaartgebied · bron: officiële PBDB API`;
   }
-  function collectionId(r){return first(r.oid,r.collection_no,r.collection_id,'');}
+  function collectionId(r){return first(r.oid,r.cxi,r.collection_no,r.collection_id,r.id,'');}
+  function collectionRecordCount(r){return Math.max(1,num(val(r,'nco','collection_count'))||1);}
   function collectionLat(r,paleo=false){return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
   function collectionLng(r,paleo=false){return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
   function collectionOccurrences(r){return num(val(r,'noc','nocc','occurrences'))||0;}
   function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
-  function buildCollectionApiUrl(filters,bounds){
-    const p=new URLSearchParams({limit:'all',show:'loc,time,strat,geo,lith,ref,entname,prot,paleoloc',vocab:'pbdb'});
-    if(filters.taxon)p.set('base_name',filters.taxon);if(filters.interval)p.set('interval',filters.interval);if(filters.region)p.set('cc',filters.region);
-    if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
-    if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);
-    if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
+  function buildCollectionApiUrl(filters,bounds,summaryLevel=null){
+    const p=new URLSearchParams({vocab:'pbdb',show:summaryLevel?'time':'loc,time,strat,geo,lith,ref,entname,prot,paleoloc'});
+    if(summaryLevel)p.set('level',String(summaryLevel));else p.set('limit','all');
+    if(filters.taxon)p.set('base_name',filters.taxon);
+    if(filters.interval){const id=intervalIdForName(filters.interval);if(id)p.set('interval_id',id);else p.set('interval',filters.interval);}
+    if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
+    if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
     p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));p.set('rowcount','');
-    return API+'/colls/list.json?'+p.toString();
+    return API+(summaryLevel?'/colls/summary.json?':'/colls/list.json?')+p.toString();
   }
+
   function cacheCollectionArea(filtersKey,bounds,records){
     collectionCache=collectionCache.filter(e=>!(e.filtersKey===filtersKey&&sameBounds(e.bounds,bounds)));
     collectionCache.unshift({filtersKey,bounds:{...bounds},records:records.slice(),complete:true,savedAt:Date.now()});
@@ -616,23 +610,37 @@
       for(let latCell=minLat;latCell<=maxLat;latCell++)for(const lngCell of cells)for(const entry of index.get(`${latCell}:${lngCell}`)||[]){if(seen.has(entry.record))continue;seen.add(entry.record);if(boundsContainCoordinate(bounds,entry.lat,entry.lng))out.push(entry);}
     }return out;
   }
-  function setMapCollections(incoming){
+  function setMapCollections(incoming,summaryLevel=null){
+    mapCollectionMode=summaryLevel?'summary':'collections';mapCollectionSummaryLevel=summaryLevel;
     const seen=new Set();mapCollections=incoming.filter(r=>{const id=collectionId(r);if(id&&seen.has(id))return false;if(id)seen.add(id);return collectionLat(r)!==null&&collectionLng(r)!==null;});
     buildCollectionSpatialIndex(mapCollections);requestMapCanvasPaint();
-    $('mapAreaStatus').textContent=fmt(mapCollections.length)+' collecties · '+fmt(mapCollections.reduce((s,r)=>s+collectionOccurrences(r),0))+' occurrences';
+    const collectionTotal=mapCollections.reduce((sum,r)=>sum+collectionRecordCount(r),0),occurrenceTotal=mapCollections.reduce((sum,r)=>sum+collectionOccurrences(r),0);
+    $('mapAreaStatus').textContent=fmt(collectionTotal)+' collecties · '+fmt(occurrenceTotal)+' occurrences'+(summaryLevel?' · PBDB geografische clusters':'');
   }
-  async function loadViewportCollections({useCache=true}={}){
-    const filters=currentFilters(),bounds=getViewportQueryBounds(),key=JSON.stringify(filters);
+  async function loadViewportCollections({useCache=true,forceDetailed=false}={}){
+    const filters=currentFilters(),bounds=getViewportQueryBounds(),zoom=map?map.getZoom():INITIAL_ZOOM;
+    const hasFilters=Object.values(filters).some(value=>String(value||'').trim()!=='');
+    const summaryLevel=forceDetailed||zoom>=7?null:(zoom<4&&!hasFilters?2:3);
+    const key=JSON.stringify({filters,summaryLevel});
     if(activeCollectionController){activeCollectionController.abort();activeCollectionController=null;}
-    if(useCache){const cached=readCollectionCache(key,bounds);if(cached){setMapCollections(cached);setStatus('Collecties uit cache');return cached;}}
-    const controller=new AbortController();activeCollectionController=controller;$('mapAreaStatus').textContent='PBDB-collecties ophalen…';
+    if(useCache){const cached=readCollectionCache(key,bounds);if(cached){setMapCollections(cached,summaryLevel);setStatus(summaryLevel?'PBDB-samenvattingsclusters uit cache':'Collecties uit cache');return cached;}}
+    const controller=new AbortController();activeCollectionController=controller;
+    $('mapAreaStatus').textContent=summaryLevel?'PBDB geografische clusters ophalen…':'PBDB-collecties ophalen…';
     const timeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},60000);
-    try{const response=await fetch(buildCollectionApiUrl(filters,bounds),{headers:{'Accept':'application/json'},signal:controller.signal});if(!response.ok)throw new Error('PBDB collecties gaf HTTP '+response.status);
-      const json=await response.json();if(json.error)throw new Error(typeof json.error==='string'?json.error:'PBDB kon collecties niet ophalen.');if(!Array.isArray(json.records))throw new Error('PBDB stuurde geen geldige collectielijst terug.');
-      if(activeCollectionController!==controller)return;setMapCollections(json.records);cacheCollectionArea(key,bounds,mapCollections);setStatus('Collecties live opgehaald');return mapCollections;
-    }catch(error){if(activeCollectionController!==controller)return;if(error.name==='AbortError'){if(controller.timedOut){$('mapAreaStatus').textContent='Collectieaanvraag duurde langer dan 60 seconden';notice('PBDB reageerde niet binnen 60 seconden. Zoom iets verder in en probeer opnieuw.','error');}}else{setStatus('PBDB collecties niet bereikbaar',false);$('mapAreaStatus').textContent='Collecties konden niet worden opgehaald';notice(error.message,'error');}}
-    finally{clearTimeout(timeout);if(activeCollectionController===controller)activeCollectionController=null;}
+    try{
+      const response=await fetch(buildCollectionApiUrl(filters,bounds,summaryLevel),{headers:{'Accept':'application/json'},signal:controller.signal});
+      if(!response.ok)throw new Error('PBDB '+(summaryLevel?'clusters':'collecties')+' gaf HTTP '+response.status);
+      const json=await response.json();if(json.error)throw new Error(typeof json.error==='string'?json.error:'PBDB kon de kaartgegevens niet ophalen.');
+      if(!Array.isArray(json.records))throw new Error('PBDB stuurde geen geldige kaartgegevens terug.');
+      if(activeCollectionController!==controller)return;
+      setMapCollections(json.records,summaryLevel);cacheCollectionArea(key,bounds,mapCollections);setStatus(summaryLevel?'PBDB-clusters live opgehaald':'PBDB-collecties live opgehaald');return mapCollections;
+    }catch(error){
+      if(activeCollectionController!==controller)return;
+      if(error.name==='AbortError'){if(controller.timedOut){$('mapAreaStatus').textContent='PBDB-kaartaanvraag duurde langer dan 60 seconden';notice('PBDB reageerde niet binnen 60 seconden. Zoom iets verder in en probeer opnieuw.','error');}}
+      else{setStatus('PBDB-kaartgegevens niet bereikbaar',false);$('mapAreaStatus').textContent='Kaartgegevens konden niet worden opgehaald';notice(error.message,'error');}
+    }finally{clearTimeout(timeout);if(activeCollectionController===controller)activeCollectionController=null;}
   }
+
   function runSearch() {
     const f=currentFilters();
     if(f.oldest && f.youngest && Number(f.oldest)<Number(f.youngest)) {
@@ -972,7 +980,7 @@
       const key=`${Math.floor(pixel.x/cellSize)}:${Math.floor(pixel.y/cellSize)}`;
       let group=grouped.get(key);
       if(!group) {
-        group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,ageSum:0,ageCount:0};
+        group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,collectionCount:0,ageSum:0,ageCount:0};
         grouped.set(key,group);
       }
       group.records.push(record);
@@ -984,17 +992,18 @@
       group.minLng=Math.min(group.minLng,lng); group.maxLng=Math.max(group.maxLng,lng);
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapRecordKey(record))) group.matchCount++;
       group.occurrenceCount+=collectionOccurrences(record);
+      group.collectionCount+=collectionRecordCount(record);
       const age=collectionAge(record);if(age!==null){group.ageSum+=age;group.ageCount++;}
       validCount++;
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapRecordKey(record))) matchingVisibleCount++;
     }
 
     for(const group of grouped.values()) {
-      const count=group.records.length;
-      const x=group.sumX/count;
+      const count=group.collectionCount;
+      const x=group.sumX/group.records.length;
       const y=group.sumY/count;
       const marker={
-        records:group.records,count:count,x:x,y:y,
+        records:group.records,count:count,binCount:group.records.length,x:x,y:y,summaryMode:mapCollectionMode==='summary',
         lat:group.sumLat/count,lng:group.sumLng/count,
         minX:group.minX,maxX:group.maxX,minY:group.minY,maxY:group.maxY,
         minLat:group.minLat,maxLat:group.maxLat,minLng:group.minLng,maxLng:group.maxLng,
@@ -1033,8 +1042,9 @@
     mapCanvasCtx.textAlign='start';
     mapCanvasCtx.textBaseline='alphabetic';
     const clusterCount=mapCanvasPoints.filter(marker=>marker.count>1).length;
+    const collectionTotal=mapCanvasPoints.reduce((sum,marker)=>sum+marker.count,0);
     const occurrenceTotal=mapCanvasPoints.reduce((sum,marker)=>sum+marker.occurrenceCount,0);
-    $('mapCount').textContent=`${fmt(validCount)} collecties · ${fmt(occurrenceTotal)} occurrences · ${fmt(clusterCount)} groepen`;
+    $('mapCount').textContent=`${fmt(collectionTotal)} collecties · ${fmt(occurrenceTotal)} occurrences · ${fmt(clusterCount)} groepen`;
     if(mapMode==='paleo') {
       setMapAreaStatus('Paleocoördinaten van de geladen selectie · ga terug naar modern om andere gebieden op te halen');
     } else if(!hasActiveQuery) {
