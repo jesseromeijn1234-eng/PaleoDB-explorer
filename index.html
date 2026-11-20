@@ -502,7 +502,9 @@
   }
   function boundsContainCoordinate(bounds,lat,lng) {
     const normalized=normalizeLongitude(lng);
-    const inLongitude=bounds.west<=bounds.east ? normalized>=bounds.west && normalized<=bounds.east : normalized>=bounds.west || normalized<=bounds.east;
+    const inLongitude=bounds.west<=bounds.east
+      ? (normalized>=bounds.west && normalized<=bounds.east) || (bounds.east>=180 && normalized===-180)
+      : normalized>=bounds.west || normalized<=bounds.east;
     return lat>=bounds.south && lat<=bounds.north && inLongitude;
   }
   function setLoadedRecords(incoming, note='') {
