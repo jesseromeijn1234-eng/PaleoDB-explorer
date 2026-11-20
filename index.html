@@ -290,7 +290,7 @@
       </section>
 
       <section class="view active" id="view-map">
-        <div class="panel map-panel"><div class="panel-head"><div><h2>Collecties op de kaart</h2><p>Noord-Holland als startgebied · collecties in het zichtbare kaartgebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">MAX. UITZOOMEN: VASTE GRENS</span><div class="segmented"><button class="active" id="modernMapBtn">Moderne coördinaten</button><button id="paleoMapBtn">PBDB paleocoördinaten</button></div></div></div>
+        <div class="panel map-panel"><div class="panel-head"><div><h2>Collecties op de kaart</h2><p>Noord-Holland als startgebied · collecties in het zichtbare kaartgebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">MAX. UITZOOMEN: VASTE GRENS</span><div class="segmented"><button class="active" id="modernMapBtn">Moderne coördinaten</button><button id="paleoMapBtn">PBDB paleocoördinaten</button><button id="gplatesMapBtn">GPlates</button></div></div></div>
           <div class="map-search-wrap">
             <div class="map-search-form" role="search">
               <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een stad, dorp, land, fossiel, formatie of record-ID…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
@@ -581,9 +581,10 @@
   }
   function collectionId(r){return first(r.oid,r.collection_no,r.collection_id,r.id,'');}
   function collectionRecordCount(r){return Math.max(1,num(val(r,'nco','collection_count'))||1);}
-  function collectionLat(r,paleo=false){return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
-  function collectionLng(r,paleo=false){return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
+  function collectionLat(r,paleo=false){if(paleo==='gplates'){const point=gplatesCoordinates.get(collectionId(r));return point?point.lat:null;}return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
+  function collectionLng(r,paleo=false){if(paleo==='gplates'){const point=gplatesCoordinates.get(collectionId(r));return point?point.lng:null;}return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
   function collectionOccurrences(r){return num(val(r,'noc','nocc','occurrences'))||0;}
+  function currentMapCoordinateMode(){return mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false);}
   function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
   function buildCollectionApiUrl(filters,bounds,summaryLevel=null){
     const p=new URLSearchParams({vocab:'pbdb',show:summaryLevel?'time':'loc,time,strat,geo,lith,ref,entname,prot,paleoloc'});
@@ -614,13 +615,14 @@
     return lat>=bounds.south&&lat<=bounds.north&&inside;
   }
   function buildCollectionSpatialIndex(incoming){
-    const index={modern:new Map(),paleo:new Map()};
-    const add=(mode,r,lat,lng)=>{if(lat===null||lng===null||Math.abs(lat)>90||Math.abs(lng)>360)return;const x=normalizeLongitude(lng),key=`${Math.floor(lat/SPATIAL_CELL_DEGREES)}:${Math.floor(x/SPATIAL_CELL_DEGREES)}`;if(!index[mode].has(key))index[mode].set(key,[]);index[mode].get(key).push({record:r,lat,lng:x});};
-    for(const r of incoming){add('modern',r,collectionLat(r),collectionLng(r));add('paleo',r,collectionLat(r,true),collectionLng(r,true));}
+    const index={modern:new Map(),paleo:new Map(),gplates:new Map()};
+    const add=(mode,r,lat,lng)=>{if(lat===null||lng===null||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>360)return;const x=normalizeLongitude(lng),key=`${Math.floor(lat/SPATIAL_CELL_DEGREES)}:${Math.floor(x/SPATIAL_CELL_DEGREES)}`;if(!index[mode].has(key))index[mode].set(key,[]);index[mode].get(key).push({record:r,lat,lng:x});};
+    for(const r of incoming){add('modern',r,collectionLat(r),collectionLng(r));add('paleo',r,collectionLat(r,true),collectionLng(r,true));add('gplates',r,collectionLat(r,'gplates'),collectionLng(r,'gplates'));}
     collectionSpatialIndex=index;
   }
   function queryCollectionSpatialIndex(bounds,paleo=false){
-    const index=collectionSpatialIndex[paleo?'paleo':'modern'],out=[],seen=new Set(),minLat=Math.floor(bounds.south/SPATIAL_CELL_DEGREES),maxLat=Math.floor(bounds.north/SPATIAL_CELL_DEGREES);
+    const mode=paleo==='gplates'?'gplates':(paleo?'paleo':'modern');
+    const index=collectionSpatialIndex[mode],out=[],seen=new Set(),minLat=Math.floor(bounds.south/SPATIAL_CELL_DEGREES),maxLat=Math.floor(bounds.north/SPATIAL_CELL_DEGREES);
     for(const [west,east] of longitudeSegments(bounds.west,bounds.east)){const minLng=Math.floor(west/SPATIAL_CELL_DEGREES),maxLng=Math.floor(east/SPATIAL_CELL_DEGREES),cells=new Set();for(let n=minLng;n<=maxLng;n++)cells.add(n);if(west<=-180||east>=180)cells.add(Math.floor(-180/SPATIAL_CELL_DEGREES));
       for(let latCell=minLat;latCell<=maxLat;latCell++)for(const lngCell of cells)for(const entry of index.get(`${latCell}:${lngCell}`)||[]){if(seen.has(entry.record))continue;seen.add(entry.record);if(boundsContainCoordinate(bounds,entry.lat,entry.lng))out.push(entry);}
     }return out;
@@ -633,6 +635,7 @@
     $('mapAreaStatus').textContent=fmt(collectionTotal)+' collecties · '+fmt(occurrenceTotal)+' occurrences'+(summaryLevel?' · PBDB geografische clusters':'');
   }
   async function loadViewportCollections({useCache=true,forceDetailed=false}={}){
+    if(mapMode==='gplates'){gplatesCoordinates.clear();gplatesReconstructionAge=null;mapMode='modern';$('modernMapBtn').classList.add('active');$('paleoMapBtn').classList.remove('active');$('gplatesMapBtn').classList.remove('active');buildCollectionSpatialIndex(mapCollections);}
     const filters=currentFilters(),bounds=getViewportQueryBounds(),zoom=map?map.getZoom():INITIAL_ZOOM;
     const hasFilters=Object.values(filters).some(value=>String(value||'').trim()!=='');
     const summaryLevel=forceDetailed||zoom>=7?null:(zoom<4&&!hasFilters?2:3);
@@ -766,7 +769,7 @@
     }
   }
   function scheduleViewportReload() {
-    if(!hasActiveQuery || !map || mapMode==='paleo') return;
+    if(!hasActiveQuery || !map || mapMode!=='modern') return;
     clearTimeout(mapMoveTimer);
     setMapAreaStatus('Kaart verplaatst · nieuw zichtbaar gebied wordt opgehaald…');
     mapMoveTimer=setTimeout(()=>{loadViewportCollections({useCache:true});if($('view-records').classList.contains('active'))loadViewportRecords({reason:'map'});},160);
@@ -935,7 +938,7 @@
       if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);if(filters.researchGroup)p.set('research_group',filters.researchGroup);
       const response=await fetch(API+'/colls/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
       const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];if(offset===0)container.innerHTML='';
-      rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'PBDB-collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
+      rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'PBDB-collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection,currentMapCoordinateMode()),lng=collectionLng(collection,currentMapCoordinateMode());if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
       const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const oldCount=container.querySelector('[data-summary-count]');if(oldCount)oldCount.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
       if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreSummary='1';more.className='btn small';more.textContent='Laad 20 meer collecties';more.addEventListener('click',()=>{more.disabled=true;loadSummaryBinCollections(summaryRecord,container,shown);});container.appendChild(more);}
       const count=document.createElement('div');count.className='meta';count.dataset.summaryCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' collecties.';container.prepend(count);
@@ -944,7 +947,7 @@
   function openSummaryBin(summaryRecord){
     const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(collectionRecordCount(summaryRecord))} collecties in deze PBDB-cluster</h3><div class="meta">${fmt(collectionOccurrences(summaryRecord))} occurrences · selecteer een collectie voor details</div><div class="collection-occ-list"></div>`;
     loadSummaryBinCollections(summaryRecord,node.querySelector('.collection-occ-list'),0);
-    L.popup({maxWidth:390,maxHeight:430,autoPan:true}).setLatLng([collectionLat(summaryRecord),collectionLng(summaryRecord)]).setContent(node).openOn(map);
+    L.popup({maxWidth:390,maxHeight:430,autoPan:true}).setLatLng([collectionLat(summaryRecord,currentMapCoordinateMode()),collectionLng(summaryRecord,currentMapCoordinateMode())]).setContent(node).openOn(map);
   }
   function openCollectionMarker(marker){
     if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});return;}
@@ -954,7 +957,7 @@
     if(marker.count===1){const collection=marker.records[0];L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);return;}
     const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(marker.count)} collecties in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} occurrences · kies een collectie voor details</div><div class="collection-occ-list"></div>`;
     const list=node.querySelector('.collection-occ-list');
-    marker.records.slice(0,50).forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat!==null&&lng!==null)L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});list.appendChild(button);});
+    marker.records.slice(0,50).forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection,currentMapCoordinateMode()),lng=collectionLng(collection,currentMapCoordinateMode());if(lat!==null&&lng!==null)L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});list.appendChild(button);});
     if(marker.records.length>50){const more=document.createElement('div');more.className='meta';more.textContent='Toont 50 kaartrecords in deze groep.';list.appendChild(more);}
     L.popup({maxWidth:390,maxHeight:420,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(node).openOn(map);
   }
@@ -995,7 +998,7 @@
     mapCanvasPoints=[];
     mapHitBuckets=new Map();
     const visibleBounds=map.getBounds();
-    const recordsToPaint=queryCollectionSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='paleo');
+    const recordsToPaint=queryCollectionSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false));
     const searchHighlightActive=mapSearchMatchedKeys instanceof Set;
     const cellSize=getClusterCellSize(map.getZoom());
     const grouped=new Map();
@@ -1034,10 +1037,10 @@
     for(const group of grouped.values()) {
       const count=group.collectionCount;
       const x=group.sumX/group.records.length;
-      const y=group.sumY/count;
+      const y=group.sumY/group.records.length;
       const marker={
         records:group.records,count:count,binCount:group.records.length,x:x,y:y,summaryMode:mapCollectionMode==='summary',
-        lat:group.sumLat/count,lng:group.sumLng/count,
+        lat:group.sumLat/group.records.length,lng:group.sumLng/group.records.length,
         minX:group.minX,maxX:group.maxX,minY:group.minY,maxY:group.maxY,
         minLat:group.minLat,maxLat:group.maxLat,minLng:group.minLng,maxLng:group.maxLng,
         matchCount:group.matchCount,size:clusterMarkerSize(count,cellSize),occurrenceCount:group.occurrenceCount,age:group.ageCount?group.ageSum/group.ageCount:null
@@ -1368,6 +1371,21 @@
     const b=getViewportQueryBounds(),p=new URLSearchParams({limit:'10',vocab:'pbdb',lngmin:String(b.west),lngmax:String(b.east),latmin:String(b.south),latmax:String(b.north)});$('prevalenceList').innerHTML='<div class="feature-muted">Taxa ophalen…</div>';
     try{const response=await fetch(API+'/occs/prevalence.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];$('prevalenceList').innerHTML=rows.length?rows.map(item=>`<button class="feature-row" type="button" data-prevalence-taxon="${esc(item.nam||'')}"><span><strong>${esc(item.nam||'Onbekend taxon')}</strong><small>Meest voorkomend in kaartgebied</small></span><b>${fmt(num(item.noc)||0)}</b></button>`).join(''):'<div class="feature-muted">Geen prevalentiegegevens beschikbaar.</div>';}catch(error){$('prevalenceList').textContent='Prevalentie niet beschikbaar: '+error.message;}
   }
+  function readSavedMapViews(){try{const value=JSON.parse(localStorage.getItem(SAVED_MAP_VIEWS_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&typeof item.name==='string'&&Array.isArray(item.center)&&item.center.length===2):[];}catch(_){return [];}}
+  function renderSavedMapViews(){const select=$('savedMapViews'),items=readSavedMapViews();select.innerHTML='<option value="">Kies een gebied…</option>'+items.map((item,index)=>`<option value="${index}">${esc(item.name)}</option>`).join('');$('deleteMapViewButton').disabled=!items.length;}
+  function saveCurrentMapView(){if(!map)return;const name=prompt('Naam voor dit kaartgebied:');if(!name||!name.trim())return;const item={name:name.trim(),center:[map.getCenter().lat,map.getCenter().lng],zoom:map.getZoom(),filters:currentFilters(),savedAt:Date.now()};const items=readSavedMapViews();items.unshift(item);try{localStorage.setItem(SAVED_MAP_VIEWS_KEY,JSON.stringify(items.slice(0,20)));renderSavedMapViews();$('savedMapViews').value='0';notice('Kaartgebied opgeslagen op dit apparaat.','success');}catch(error){notice('Opslaan is niet mogelijk: '+error.message,'error');}}
+  function loadSavedMapView(index){const item=readSavedMapViews()[index];if(!item||!map)return;const f=item.filters||{};$('taxonInput').value=f.taxon||'';$('intervalInput').value=f.interval||'';$('regionInput').value=f.region||'';$('oldestInput').value=f.oldest||'';$('youngestInput').value=f.youngest||'';$('stratigraphyInput').value=f.stratigraphy||'';$('authorizerInput').value=f.authorizer||'';$('refAuthorInput').value=f.refAuthor||'';$('researchGroupInput').value=f.researchGroup||'';resetGPlatesMode();hasActiveQuery=true;map.setView(item.center,clamp(Number(item.zoom)||INITIAL_ZOOM,map.getMinZoom(),map.getMaxZoom()),{animate:true});setTimeout(()=>loadViewportCollections({useCache:true}),180);}
+  function deleteSavedMapView(index){const items=readSavedMapViews();if(!Number.isInteger(index)||index<0||index>=items.length)return;items.splice(index,1);try{localStorage.setItem(SAVED_MAP_VIEWS_KEY,JSON.stringify(items));renderSavedMapViews();notice('Opgeslagen kaartgebied verwijderd.','success');}catch(error){notice('Verwijderen niet mogelijk: '+error.message,'error');}}
+  async function reconstructWithGPlates(){
+    if(!map)return;if(mapCollectionMode==='summary'||map.getZoom()<7){$('gplatesStatus').textContent='Zoom in tot individuele collecties geladen zijn.';notice('GPlates werkt op echte PBDB-collectiecoördinaten. Zoom in en probeer opnieuw.');return;}
+    const age=num($('gplatesAgeInput').value),model=$('gplatesModel').value;if(age===null||age<0||age>1100){$('gplatesStatus').textContent='Kies een ouderdom tussen 0 en 1100 Ma.';return;}
+    const rows=mapCollections.filter(record=>collectionId(record)&&collectionLat(record)!==null&&collectionLng(record)!==null);if(!rows.length){$('gplatesStatus').textContent='Geen collectiecoördinaten beschikbaar.';return;}
+    $('runGplatesButton').disabled=true;$('gplatesStatus').textContent='GPlates reconstrueert '+fmt(rows.length)+' collecties…';const next=new Map();
+    try{for(let offset=0;offset<rows.length;offset+=200){const batch=rows.slice(offset,offset+200);const body=new URLSearchParams({lats:batch.map(record=>collectionLat(record)).join(','),lons:batch.map(record=>collectionLng(record)).join(','),time:String(age),model:model});const response=await fetch('https://gws.gplates.org/reconstruct/reconstruct_points/',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:body.toString()});if(!response.ok)throw new Error('GPlates gaf HTTP '+response.status);const json=await response.json();let coordinates=json.coordinates||json.geometry?.coordinates;if(!Array.isArray(coordinates)&&Array.isArray(json.features))coordinates=json.features.map(feature=>feature.geometry?.coordinates);if(!Array.isArray(coordinates)||coordinates.length!==batch.length)throw new Error('GPlates stuurde een onverwacht aantal punten terug.');coordinates.forEach((coordinate,index)=>{if(!Array.isArray(coordinate)||coordinate.length<2)return;const lng=Number(coordinate[0]),lat=Number(coordinate[1]);if(Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180)next.set(collectionId(batch[index]),{lat,lng});});$('gplatesStatus').textContent='GPlates: '+fmt(Math.min(offset+batch.length,rows.length))+' / '+fmt(rows.length)+' collecties…';}
+      gplatesCoordinates=next;gplatesReconstructionAge=age;buildCollectionSpatialIndex(mapCollections);mapMode='gplates';$('modernMapBtn').classList.remove('active');$('paleoMapBtn').classList.remove('active');$('gplatesMapBtn').classList.add('active');requestMapCanvasPaint();$('gplatesStatus').textContent=fmt(next.size)+' collecties gereconstrueerd · '+age+' Ma · '+model;if(next.size<rows.length)notice(fmt(rows.length-next.size)+' collecties konden niet worden gereconstrueerd.');
+    }catch(error){$('gplatesStatus').textContent='GPlates-reconstructie mislukt: '+error.message;notice('GPlates kon de reconstructie niet uitvoeren: '+error.message,'error');}finally{$('runGplatesButton').disabled=false;}
+  }
+  function resetGPlatesMode(){gplatesCoordinates.clear();gplatesReconstructionAge=null;mapMode='modern';buildCollectionSpatialIndex(mapCollections);$('modernMapBtn').classList.add('active');$('paleoMapBtn').classList.remove('active');$('gplatesMapBtn').classList.remove('active');$('gplatesStatus').textContent='Moderne coördinaten';requestMapCanvasPaint();}
   function switchView(name) {
     const allowed = ['overview','records','map','timeline','taxa','diversity'];
     if (!allowed.includes(name)) name = 'map';
@@ -1407,11 +1425,15 @@
   document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.goto)));
   $('runSearch').addEventListener('click',runSearch);$('runSearchTop').addEventListener('click',runSearch);
   $('cancelSearch').addEventListener('click',()=>{if(activeSearchController){activeSearchController.userCancelled=true;activeSearchController.abort();}});
-  ['taxonInput','intervalInput','regionInput','oldestInput','youngestInput'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')runSearch();}));
+  ['taxonInput','intervalInput','regionInput','oldestInput','youngestInput','stratigraphyInput','authorizerInput','refAuthorInput','researchGroupInput'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')runSearch();}));
   $('resetFilters').addEventListener('click',resetFilters);
   $('helpButton').addEventListener('click',()=>$('helpModal').classList.add('open'));$('closeHelp').addEventListener('click',()=>$('helpModal').classList.remove('open'));$('closeDetail').addEventListener('click',()=>$('detailModal').classList.remove('open'));
   $('detailModal').addEventListener('click',e=>{if(e.target===$('detailModal'))$('detailModal').classList.remove('open');});$('helpModal').addEventListener('click',e=>{if(e.target===$('helpModal'))$('helpModal').classList.remove('open');});
-  $('modernMapBtn').addEventListener('click',()=>{mapMode='modern';$('modernMapBtn').classList.add('active');$('paleoMapBtn').classList.remove('active');renderMap();});$('paleoMapBtn').addEventListener('click',()=>{mapMode='paleo';$('paleoMapBtn').classList.add('active');$('modernMapBtn').classList.remove('active');renderMap();});
+  $('modernMapBtn').addEventListener('click',resetGPlatesMode);
+  $('paleoMapBtn').addEventListener('click',()=>{gplatesCoordinates.clear();gplatesReconstructionAge=null;mapMode='paleo';buildCollectionSpatialIndex(mapCollections);$('paleoMapBtn').classList.add('active');$('modernMapBtn').classList.remove('active');$('gplatesMapBtn').classList.remove('active');$('gplatesStatus').textContent='PBDB-paleocoördinaten';requestMapCanvasPaint();});
+  $('gplatesMapBtn').addEventListener('click',()=>{if(gplatesCoordinates.size){mapMode='gplates';$('gplatesMapBtn').classList.add('active');$('modernMapBtn').classList.remove('active');$('paleoMapBtn').classList.remove('active');requestMapCanvasPaint();}else reconstructWithGPlates();});
+  $('saveMapViewButton').addEventListener('click',saveCurrentMapView);$('deleteMapViewButton').addEventListener('click',()=>deleteSavedMapView(Number($('savedMapViews').value)));$('savedMapViews').addEventListener('change',()=>{if($('savedMapViews').value!=='')loadSavedMapView(Number($('savedMapViews').value));});
+  $('runGplatesButton').addEventListener('click',reconstructWithGPlates);$('resetGplatesButton').addEventListener('click',resetGPlatesMode);
   $('mapSearchButton').addEventListener('click',runMapSearch);$('mapSearchClear').addEventListener('click',clearMapSearch);$('mapSearchInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();runMapSearch();}});
   $('toggleFiltersButton').addEventListener('click',()=>{
     const content=document.querySelector('.content');
@@ -1446,6 +1468,7 @@
   // The minimum zoom is based on the former Canada-wide map scale, not its location.
   renderAll();
   switchView('map');
+  renderSavedMapViews();
   initTimeScale();
   setTimeout(() => {
     if (!map || hasAutoLoadedMap) return;
