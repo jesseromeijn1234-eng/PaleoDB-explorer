@@ -482,8 +482,12 @@
     for(const [west,east] of lonSegments) {
       const minLng=Math.floor(west/SPATIAL_CELL_DEGREES);
       const maxLng=Math.floor(east/SPATIAL_CELL_DEGREES);
+      const lngCells=new Set();
+      for(let cell=minLng;cell<=maxLng;cell++) lngCells.add(cell);
+      // Longitude +180 is normalized to -180 in the index; include the seam bucket.
+      if(west<=-180 || east>=180) lngCells.add(Math.floor(-180/SPATIAL_CELL_DEGREES));
       for(let latCell=minLat;latCell<=maxLat;latCell++) {
-        for(let lngCell=minLng;lngCell<=maxLng;lngCell++) {
+        for(const lngCell of lngCells) {
           const bucket=index.get(`${latCell}:${lngCell}`);
           if(!bucket) continue;
           for(const entry of bucket) {
