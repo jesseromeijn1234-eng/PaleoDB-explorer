@@ -260,7 +260,7 @@
               <button class="btn primary" id="mapSearchButton" type="button">Zoeken</button>
               <button class="btn" id="mapSearchClear" type="button">Wissen</button><button class="btn" id="toggleFiltersButton" type="button" aria-expanded="false">Filters</button>
             </div>
-            <div class="map-search-help">Zoekt plaatsnamen én doorzoekt de geladen fossielstipjes. Geen automatische suggesties: zoeken start pas wanneer je op Enter of Zoeken klikt.</div>
+            <div class="map-search-help">Zoekt plaatsnamen en fossielnamen in de PBDB-database. Geen automatische suggesties: zoeken start pas wanneer je op Enter of Zoeken klikt.</div>
           </div>
           <div class="map-search-results" id="mapSearchResults" hidden aria-live="polite"></div>
           <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> Fossielvindplaats</span><span id="mapCount">0 locaties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
@@ -276,7 +276,7 @@
 </div>
 
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Record details</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
-<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt PaleoDB Explorer</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek op taxon</strong><p>Vul een soort of groep in, bijvoorbeeld Tyrannosaurus of Trilobita. De zoekopdracht neemt ook onderliggende taxa mee.</p></div><div class="help-card"><strong>⏳ Filter op tijd</strong><p>Kies een geologisch tijdvak of geef een ouderdomsbereik op in Ma (miljoen jaar geleden).</p></div><div class="help-card"><strong>🌍 Verken de kaart</strong><p>De kaart opent in Noord-Holland. Je kunt verder inzoomen en de kaart verschuiven; bij iedere nieuwe kaartpositie worden records opgehaald voor het zichtbare gebied. Je kunt uitzoomen tot ongeveer dezelfde kaartschaal als het oude Canada-overzicht, maar de kaart start niet in Canada. Paleocoördinaten worden alleen getoond wanneer PBDB ze heeft meegeleverd.</p></div></div><p class="footer-note">De kaart tekent de opgehaalde fossielpunten in één canvaslaag in plaats van duizenden losse kaartobjecten. Elk punt blijft op zijn eigen PBDB-coördinaat staan en heeft een vierkante klikzone. Zoek boven de kaart op plaatsen of in de geladen fossielrecords. Plaatszoeken gebruikt Nominatim van OpenStreetMap en start alleen na een bewuste zoekactie; er is geen automatische autocomplete.</p></div></div></div>
+<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt PaleoDB Explorer</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek op taxon</strong><p>Vul een soort of groep in, bijvoorbeeld Tyrannosaurus of Trilobita. De zoekopdracht neemt ook onderliggende taxa mee.</p></div><div class="help-card"><strong>⏳ Filter op tijd</strong><p>Kies een geologisch tijdvak of geef een ouderdomsbereik op in Ma (miljoen jaar geleden).</p></div><div class="help-card"><strong>🌍 Verken de kaart</strong><p>De kaart opent in Noord-Holland. Bij iedere kaartpositie worden alle fossielrecords voor het zichtbare gebied opgehaald. Je kunt verder inzoomen en uitzoomen tot de vaste maximale kaartomvang. Paleocoördinaten worden alleen getoond wanneer PBDB ze heeft meegeleverd.</p></div></div><p class="footer-note">De kaart tekent de opgehaalde fossielpunten in één canvaslaag in plaats van duizenden losse kaartobjecten. Elk punt blijft op zijn eigen PBDB-coördinaat staan en heeft een vierkante klikzone. Zoek boven de kaart op plaatsen of in de geladen fossielrecords. Plaatszoeken gebruikt Nominatim van OpenStreetMap en start alleen na een bewuste zoekactie; er is geen automatische autocomplete.</p></div></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
@@ -307,14 +307,14 @@
   let mapTileProvider = "osm";
   // De kaart begint in Noord-Holland. De oude Canada-omvang wordt alleen gebruikt
   // om de maximale uitzoomstand ongeveer gelijk te houden; de kaart centreert daar NIET.
-  const API_PAGE_SIZE = 500;
+  const PBDB_REQUEST_LIMIT = 'all';
   const MAP_CACHE_LIMIT = 8;
   const MAP_PADDING_RATIO = 0.015;
   const MAX_ZOOM_OUT_REFERENCE_BOUNDS = [[41.5, -141], [83.5, -52]];
   const INITIAL_CENTER = [52.55, 4.85];
   const INITIAL_ZOOM = 9;
-  const CANVAS_DOT_SIZE = 5;
-  const CANVAS_HITBOX_SIZE = 14;
+  const CANVAS_DOT_SIZE = 10;
+  const CANVAS_HITBOX_SIZE = 26;
   const $ = id => document.getElementById(id);
   const fmt = n => Number(n).toLocaleString('nl-NL');
   const first = (...vals) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
@@ -351,8 +351,7 @@
   function buildApiUrl(f, offset=0, bounds=null) {
     const p = new URLSearchParams();
     p.set('vocab','pbdb');
-    p.set('limit',String(API_PAGE_SIZE));
-    p.set('offset',String(offset));
+    p.set('limit',String(PBDB_REQUEST_LIMIT));
     p.set('show',SHOW);
     if (f.taxon) p.set('base_name',f.taxon);
     if (f.interval) p.set('interval',f.interval);
@@ -447,18 +446,6 @@
     map.setMinZoom(fitZoom);
     if (map.getZoom() < fitZoom) map.setZoom(fitZoom, { animate: false });
   }
-  function getViewportLoadPolicy() {
-    // The first view in Noord-Holland starts with one lightweight API page.
-    // Higher limits are used only when the user zooms into a smaller area.
-    const zoom = map ? map.getZoom() : INITIAL_ZOOM;
-    if (zoom < 6) return { maxRecords: 500, label: 'groot kaartoverzicht' };
-    if (zoom < 10) return { maxRecords: 500, label: 'kaartoverzicht' };
-    if (zoom < 12) return { maxRecords: 750, label: 'regionaal detail' };
-    if (zoom < 14) return { maxRecords: 1000, label: 'detailweergave' };
-    if (zoom < 16) return { maxRecords: 1500, label: 'lokaal detail' };
-    return { maxRecords: 2000, label: 'maximaal detail' };
-  }
-
   function occurrenceKey(record) {
     const id=first(record.occurrence_no,record.occurrence_id,record.occ_no,record.id);
     return id!==undefined ? `occ:${id}` : null;
@@ -490,26 +477,24 @@
     return loadViewportRecords({ reason: 'search' });
   }
   async function loadViewportRecords({ reason='map', useCache=true } = {}) {
-    const f=currentFilters();
-    if(f.oldest && f.youngest && Number(f.oldest)<Number(f.youngest)) return;
-    const queryBounds=getViewportQueryBounds();
-    const filtersKey=filterCacheKey(f);
-    const policy=getViewportLoadPolicy();
+    const filters=currentFilters();
+    if(filters.oldest && filters.youngest && Number(filters.oldest)<Number(filters.youngest)) return;
+    const bounds=getViewportQueryBounds();
+    const filtersKey=filterCacheKey(filters);
 
-    // A new viewport supersedes a request for the previous one.
+    // Stop an older viewport request as soon as a new search starts.
     if(activeSearchController) {
       activeSearchController.abort();
       activeSearchController=null;
     }
 
     if(useCache) {
-      const cached=findCachedArea(filtersKey,queryBounds);
+      const cached=findCachedArea(filtersKey,bounds);
       if(cached) {
         clearNotice();
-        const cacheNote = cached.derived ? 'uit eerder volledig geladen groter gebied' : (cached.complete ? 'volledig kaartgebied' : 'snelle selectie van dit kaartgebied');
-        setLoadedRecords(cached.records,fmt(cached.records.length) + ' records uit cache · ' + cacheNote);
+        setLoadedRecords(cached.records,fmt(cached.records.length) + ' fossielrecords uit cache');
         setStatus('Gebied uit cache geladen');
-        setMapAreaStatus('Cache · ' + fmt(cached.records.length) + ' records · ' + cacheNote + ' · geen nieuwe API-aanvraag');
+        setMapAreaStatus(fmt(cached.records.length) + ' fossielrecords in beeld');
         return;
       }
     }
@@ -517,137 +502,64 @@
     const controller=new AbortController();
     controller.userCancelled=false;
     activeSearchController=controller;
-    const allRecords=[];
-    const seenIds=new Set();
-    let offset=0;
-    let totalFound=null;
-    let stoppedEarly=false;
-    let complete=false;
-
     clearNotice();
-    loading(true,`Eerste ${fmt(policy.maxRecords)} records laden voor ${policy.label}…`,true);
+    loading(true,'Alle fossielvondsten in het zichtbare gebied ophalen…',true);
     setStatus('Verbinden met PBDB…');
-    setMapAreaStatus(`Eerste groep ophalen · ${policy.label}`);
+    setMapAreaStatus('Fossielvindplaatsen ophalen…');
+
     try {
-      while(allRecords.length < policy.maxRecords) {
-        let response;
-        const requestTimeout = setTimeout(() => { controller.timedOut=true; controller.abort(); }, 20000);
-        try {
-          response=await fetch(buildApiUrl(f,offset,queryBounds),{
-            headers:{'Accept':'application/json'},
-            signal:controller.signal
-          });
-        } finally {
-          clearTimeout(requestTimeout);
-        }
-        if(!response.ok) throw new Error(`PBDB gaf een HTTP-fout (${response.status}).`);
-        const json=await response.json();
-        if(json.error) throw new Error(typeof json.error==='string'?json.error:'PBDB heeft de zoekopdracht niet kunnen verwerken.');
-
-        const page=Array.isArray(json.records)?json.records:[];
-        if(totalFound===null) {
-          const rawTotal=first(json.records_found,json.total_records,json.records_found_count);
-          const parsedTotal=num(rawTotal);
-          if(parsedTotal!==null && parsedTotal>=0) totalFound=parsedTotal;
-        }
-
-        let addedThisPage=0;
-        for(const record of page) {
-          const key=occurrenceKey(record);
-          if(key && seenIds.has(key)) continue;
-          if(key) seenIds.add(key);
-          allRecords.push(record);
-          addedThisPage++;
-          if(allRecords.length>=policy.maxRecords) break;
-        }
-
-        if(page.length===0) {
-          complete=true;
-          break;
-        }
-        // Protect against a server ignoring offset and returning the same page forever.
-        if(addedThisPage===0) {
-          stoppedEarly=true;
-          break;
-        }
-
-        offset+=page.length;
-        complete = totalFound!==null
-          ? (totalFound<=policy.maxRecords && offset>=totalFound && allRecords.length>=totalFound)
-          : (page.length<API_PAGE_SIZE && allRecords.length<policy.maxRecords);
-
-        // Render each group immediately instead of waiting for every page.
-        const totalLabel=totalFound!==null?` · PBDB meldt ${fmt(totalFound)} records in dit gebied`:'';
-        const zoomMessage=totalFound!==null && totalFound>policy.maxRecords
-          ? ' · overige records worden pas na verder inzoomen opgehaald'
-          : '';
-        loading(true,`${fmt(allRecords.length)} records opgehaald${totalLabel} · ${policy.label}${zoomMessage}`,true);
-        setLoadedRecords(allRecords.slice(),`${fmt(allRecords.length)} records direct zichtbaar · ${policy.label}`);
-        setMapAreaStatus(`${fmt(allRecords.length)} opgehaald${totalLabel} · volgende groep wordt opgehaald…`);
-
-        if(complete || allRecords.length>=policy.maxRecords) break;
-        if(page.length<API_PAGE_SIZE) {
-          complete=true;
-          break;
-        }
-        await wait(70);
+      // PBDB supports limit=all. The geographic bounding box remains applied,
+      // so this retrieves all records for the visible map area, not the whole world.
+      let response;
+      const requestTimeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},60000);
+      try {
+        response=await fetch(buildApiUrl(filters,0,bounds),{
+          headers:{'Accept':'application/json'},
+          signal:controller.signal
+        });
+      } finally {
+        clearTimeout(requestTimeout);
       }
-
+      if(!response.ok) throw new Error('PBDB gaf een HTTP-fout (' + response.status + ').');
+      const json=await response.json();
+      if(json.error) throw new Error(typeof json.error==='string' ? json.error : 'PBDB kon de kaartgegevens niet ophalen.');
+      if(!Array.isArray(json.records)) throw new Error('PBDB stuurde geen geldige lijst met fossielrecords terug.');
       if(activeSearchController!==controller) return;
-      const hasMore = totalFound!==null && totalFound>allRecords.length;
-      const capped = !complete && !stoppedEarly && allRecords.length>=policy.maxRecords;
-      if(allRecords.length===0) {
-        setLoadedRecords([], 'Geen records gevonden in dit kaartgebied');
-      } else {
-        const cappedNote = totalFound!==null
-          ? `${fmt(allRecords.length)} opgehaald · PBDB meldt ${fmt(totalFound)} in gebied; rest niet opgehaald`
-          : `${fmt(allRecords.length)} records getoond · mogelijk meer beschikbaar bij verder inzoomen`;
-        setLoadedRecords(allRecords, capped ? cappedNote : `${fmt(allRecords.length)} records opgehaald voor dit kaartgebied`);
+
+      // Keep every distinct PBDB occurrence returned for this exact area.
+      const seen=new Set();
+      const allRecords=[];
+      for(const record of json.records) {
+        const key=occurrenceKey(record);
+        if(key && seen.has(key)) continue;
+        if(key) seen.add(key);
+        allRecords.push(record);
       }
-      // Cache a capped preview only for the exact same viewport. It is never
-      // reused as a complete result for a smaller, zoomed-in viewport.
-      cacheArea(filtersKey,queryBounds,allRecords,complete && !stoppedEarly && !capped);
+
+      setLoadedRecords(allRecords,fmt(allRecords.length) + ' fossielrecords uit het zichtbare gebied');
+      cacheArea(filtersKey,bounds,allRecords,true);
       setStatus('Live verbonden met PBDB');
-      if(capped) {
-        const nextLevel = policy.maxRecords===500 ? 'Zoom één of meer niveaus in' : 'Zoom verder in';
-        const totalText = totalFound!==null ? ` · PBDB meldt ${fmt(totalFound)} in totaal` : '';
-        setMapAreaStatus(`${fmt(allRecords.length)} records geladen${totalText} · ${nextLevel} om meer te zien`);
-        const countText = totalFound!==null ? `PBDB meldt ${fmt(totalFound)} records, maar slechts ${fmt(allRecords.length)} zijn opgehaald` : `${fmt(allRecords.length)} records zijn opgehaald`;
-        notice(`Snelle kaartweergave: ${countText}. De overige records worden op dit zoomniveau helemaal niet gedownload. ${nextLevel} op een kleiner gebied om meer details te zien.`, 'success');
-      } else if(allRecords.length===0) {
-        setMapAreaStatus('Geen fossielrecords gevonden in dit gebied');
-        notice('Geen resultaten gevonden in dit kaartgebied. Verschuif de kaart, zoom verder in of pas je filters aan.');
-      } else if(stoppedEarly) {
-        setMapAreaStatus(`${fmt(allRecords.length)} records geladen · herhaalde API-pagina gedetecteerd`);
-        notice(`PBDB stuurde een herhaalde pagina terug. Het laden is veilig gestopt na ${fmt(allRecords.length)} unieke records.`);
+      setMapAreaStatus(fmt(allRecords.length) + ' fossielrecords in beeld');
+      if(allRecords.length===0) {
+        notice('Geen fossielvindplaatsen gevonden in dit kaartgebied. Verschuif de kaart of pas je filters aan.');
       } else {
-        setMapAreaStatus(`${fmt(allRecords.length)} records in dit gebied geladen`);
-        notice(`Klaar: ${fmt(allRecords.length)} resultaten opgehaald voor het zichtbare kaartgebied.`, 'success');
+        clearNotice();
       }
-    } catch(err) {
+    } catch(error) {
       if(activeSearchController!==controller) return;
-      if(err.name==='AbortError') {
+      if(error.name==='AbortError') {
         if(controller.userCancelled) {
-          if(allRecords.length) {
-            setLoadedRecords(allRecords,`${fmt(allRecords.length)} records geladen · handmatig gestopt`);
-            notice(`Laden gestopt. ${fmt(allRecords.length)} opgehaalde records blijven beschikbaar.`, 'success');
-            setMapAreaStatus(`Handmatig gestopt · ${fmt(allRecords.length)} records opgehaald`);
-            setStatus('Laden gestopt',false);
-          } else {
-            notice('Zoekopdracht geannuleerd.');
-            setStatus('Zoeken gestopt',false);
-          }
+          setStatus('Zoeken gestopt',false);
+          setMapAreaStatus('Zoekopdracht gestopt');
         } else if(controller.timedOut) {
-          if(allRecords.length) setLoadedRecords(allRecords,`${fmt(allRecords.length)} records geladen · PBDB reageerde te langzaam`);
           setStatus('PBDB reageert te langzaam',false);
-          setMapAreaStatus(`Verbinding duurde te lang · ${fmt(allRecords.length)} eventueel al opgehaalde records behouden`);
-          notice(`PBDB reageerde niet binnen 20 seconden. ${allRecords.length ? `${fmt(allRecords.length)} al opgehaalde records zijn behouden. ` : ''}Probeer opnieuw of zoom in op een kleiner gebied.`, 'error');
+          setMapAreaStatus('De PBDB-aanvraag duurde te lang');
+          notice('PBDB reageerde niet binnen 60 seconden. Probeer een kleiner kaartgebied of probeer het opnieuw.','error');
         }
       } else {
-        if(allRecords.length) setLoadedRecords(allRecords,`${fmt(allRecords.length)} records geladen · gedeeltelijk resultaat`);
         setStatus('PBDB niet bereikbaar',false);
-        setMapAreaStatus('Ophalen mislukt · controleer de verbinding');
-        notice(`De live verbinding is niet gelukt. ${err.message} ${allRecords.length?`${fmt(allRecords.length)} al opgehaalde records zijn wel behouden. `:''}Controleer je internetverbinding. Als PBDB browserverzoeken blokkeert, is een kleine server/proxy nodig.`, 'error');
+        setMapAreaStatus('Fossielgegevens konden niet worden opgehaald');
+        notice('De live verbinding is niet gelukt. ' + error.message + ' Controleer je internetverbinding en probeer het opnieuw.','error');
       }
     } finally {
       if(activeSearchController===controller) {
@@ -789,7 +701,7 @@
     if (!hits.length) return;
     const nearest = hits[0].point;
     const nearby = hits
-      .filter(hit => Math.abs(hit.point.x - nearest.x) <= 3.5 && Math.abs(hit.point.y - nearest.y) <= 3.5)
+      .filter(hit => Math.abs(hit.point.x - nearest.x) <= (CANVAS_DOT_SIZE / 2 + 1) && Math.abs(hit.point.y - nearest.y) <= (CANVAS_DOT_SIZE / 2 + 1))
       .slice(0, 12)
       .map(hit => hit.point.record);
     const uniqueNearby = [...new Map(nearby.map(record => [occurrenceKey(record) || `${getTaxon(record)}:${getAge(record)}`, record])).values()];
@@ -839,7 +751,7 @@
     for (const record of recordsToPaint) {
       const isSearchMatch = searchHighlightActive && mapSearchMatchedKeys.has(mapRecordKey(record));
       mapCanvasCtx.globalAlpha = searchHighlightActive && !isSearchMatch ? 0.16 : 1;
-      mapCanvasCtx.fillStyle = isSearchMatch ? '#e66b35' : (mapMode === 'paleo' ? '#d18a36' : '#118f83');
+      mapCanvasCtx.fillStyle = isSearchMatch ? '#f0783f' : (mapMode === 'paleo' ? '#e3a03d' : '#12a293');
       const lat = getLat(record, mapMode === 'paleo');
       const lng = getLng(record, mapMode === 'paleo');
       if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 360) continue;
@@ -854,7 +766,13 @@
       // Draw at the actual PBDB coordinate. No artificial cluster-centre positions.
       const x = Math.round(pixel.x - dot / 2);
       const y = Math.round(pixel.y - dot / 2);
+      // Dark and white outlines keep every square clear on varied map backgrounds.
+      mapCanvasCtx.lineWidth = 2.5;
+      mapCanvasCtx.strokeStyle = 'rgba(13,35,48,.82)';
+      mapCanvasCtx.strokeRect(x - 1.25, y - 1.25, dot + 2.5, dot + 2.5);
       mapCanvasCtx.fillRect(x, y, dot, dot);
+      mapCanvasCtx.lineWidth = 1.4;
+      mapCanvasCtx.strokeStyle = 'rgba(255,255,255,.98)';
       mapCanvasCtx.strokeRect(x - .5, y - .5, dot + 1, dot + 1);
       validCount++;
       if (isSearchMatch) matchingVisibleCount++;
@@ -1143,7 +1061,7 @@
     document.querySelectorAll('.nav button[data-view]').forEach(button=>button.classList.toggle('active',button.dataset.view===name));
     const names={overview:'Overzicht',records:'Fossielvondsten',map:'Vindplaatsenkaart',timeline:'Geologische tijd'};
     const titles={overview:'Ontdek de geschiedenis van het leven.',records:'Fossielvondsten',map:'Waar zijn fossielen gevonden?',timeline:'Leven door de geologische tijd.'};
-    const subs={overview:'Doorzoek fossielvondsten binnen het zichtbare kaartgebied.',records:'Doorzoek, sorteer en open de records uit het geladen kaartgebied.',map:'De kaart laadt automatisch alleen fossielvindplaatsen in het zichtbare kaartgebied.',timeline:'Bekijk fossielvondsten door de geologische tijd.'};
+    const subs={overview:'Doorzoek fossielvondsten binnen het zichtbare kaartgebied.',records:'Doorzoek, sorteer en open de records uit het geladen kaartgebied.',map:'De kaart laadt alle fossielvindplaatsen in het zichtbare kaartgebied.',timeline:'Bekijk fossielvondsten door de geologische tijd.'};
     $('crumbCurrent').textContent=names[name];
     $('pageTitle').textContent=titles[name];
     $('pageSubtitle').textContent=subs[name];
