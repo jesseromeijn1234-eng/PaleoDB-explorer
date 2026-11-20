@@ -303,7 +303,7 @@
           <div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Geologische tijd wordt geladen…</span></div>
           <div class="map-extra-controls">
             <div class="map-saved-controls"><strong>Opgeslagen gebieden op dit apparaat</strong><select id="savedMapViews" aria-label="Opgeslagen kaartgebieden"><option value="">Kies een gebied…</option></select><button class="btn small" id="saveMapViewButton" type="button">Bewaar huidige kaart</button><button class="btn small" id="deleteMapViewButton" type="button">Verwijder</button></div>
-            <div class="map-gplates-controls"><strong>GPlates reconstructie van fossielpunten</strong><label for="gplatesAgeInput">Ouderdom (Ma)</label><input id="gplatesAgeInput" type="number" min="0" max="1800" step="1" value="100"><label for="gplatesModel">Model</label><select id="gplatesModel"><option value="ZAHIROVIC2022">Zahirovic 2022 (0–410 Ma)</option><option value="MULLER2022">Müller 2022 (0–1000 Ma)</option><option value="MERDITH2021">Merdith 2021 (0–1000 Ma)</option><option value="PALEOMAP">PALEOMAP (0–1100 Ma)</option><option value="CAO2024">Cao 2024 (0–1800 Ma)</option><option value="MULLER2019">Müller 2019 (0–250 Ma)</option></select><button class="btn small primary" id="runGplatesButton" type="button">Reconstructeer</button><button class="btn small" id="resetGplatesButton" type="button">Terug naar nu</button><span id="gplatesStatus" class="feature-muted">Alleen PBDB-fossielpunten worden teruggerekend; de achtergrondkaart blijft modern.</span></div>
+            <div class="map-gplates-controls"><strong>GPlates reconstructie van fossielpunten</strong><label for="gplatesAgeInput">Ouderdom (Ma)</label><input id="gplatesAgeInput" type="number" min="0" max="410" step="1" value="100"><label for="gplatesModel">Model</label><select id="gplatesModel"><option value="ZAHIROVIC2022">Zahirovic 2022 (0–410 Ma)</option><option value="MULLER2022">Müller 2022 (0–1000 Ma)</option><option value="MERDITH2021">Merdith 2021 (0–1000 Ma)</option><option value="PALEOMAP">PALEOMAP (0–1100 Ma)</option><option value="CAO2024">Cao 2024 (0–1800 Ma)</option><option value="MULLER2019">Müller 2019 (0–250 Ma)</option></select><button class="btn small primary" id="runGplatesButton" type="button">Reconstructeer</button><button class="btn small" id="resetGplatesButton" type="button">Terug naar nu</button><span id="gplatesStatus" class="feature-muted">Alleen PBDB-fossielpunten worden teruggerekend; de achtergrondkaart blijft modern.</span></div>
           </div>
           <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> PBDB-collectie / groep</span><span id="mapCount">0 collecties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
       </section>
@@ -914,7 +914,7 @@
     const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'ref','ref_author'),'Referentie niet beschikbaar');
     node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> occurrences in deze collectie</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Laad occurrences</button><button type="button" class="collection-filter-name">Filter op formatie</button></div><div class="collection-occ-list" hidden></div>`;
     node.querySelector('.collection-load-occ').addEventListener('click',()=>loadCollectionOccurrences(collection,node.querySelector('.collection-occ-list')));
-    node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'sfm','sgr','smb','formation','stratigraphic_formation'),'');if(!name||name==='—'){notice('Voor deze collectie is geen formatie beschikbaar.');return;}$('stratigraphyInput').value=name;switchView('map');runSearch();});
+    node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'sfm'),'');if(!name||name==='—'){notice('Voor deze collectie is geen formatie beschikbaar.');return;}$('stratigraphyInput').value=name;switchView('map');runSearch();});
     return node;
   }
   async function loadCollectionOccurrences(collection,container,offset=0){
@@ -933,7 +933,7 @@
       const total=num(json.records_found)||offset+rows.length,shown=offset+rows.length;
       if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreOccurrences='1';more.className='btn small';more.textContent='Laad 100 meer occurrences';more.addEventListener('click',()=>{more.disabled=true;loadCollectionOccurrences(collection,container,shown);});container.appendChild(more);}
       const count=document.createElement('div');count.className='meta';count.dataset.occurrenceCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' occurrences.';container.prepend(count);
-    }catch(error){const message=document.createElement('div');message.className='feature-muted';message.textContent='Occurrences konden niet geladen worden: '+error.message;container.appendChild(message);}
+    }catch(error){const more=container.querySelector('[data-more-occurrences]');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Occurrences konden niet geladen worden: '+error.message;container.appendChild(message);}
   }
   async function loadSummaryBinCollections(summaryRecord,container,offset=0){
     if(!container)return;if(offset===0)container.innerHTML='<div class="feature-muted">Collecties ophalen…</div>';
@@ -950,7 +950,7 @@
       const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const oldCount=container.querySelector('[data-summary-count]');if(oldCount)oldCount.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
       if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreSummary='1';more.className='btn small';more.textContent='Laad 20 meer collecties';more.addEventListener('click',()=>{more.disabled=true;loadSummaryBinCollections(summaryRecord,container,shown);});container.appendChild(more);}
       const count=document.createElement('div');count.className='meta';count.dataset.summaryCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' collecties.';container.prepend(count);
-    }catch(error){container.textContent='Collecties konden niet worden geladen: '+error.message;}
+    }catch(error){const more=container.querySelector('[data-more-summary]');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Collecties konden niet worden geladen: '+error.message;container.appendChild(message);}
   }
   function openSummaryBin(summaryRecord){
     const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(collectionRecordCount(summaryRecord))} collecties in deze PBDB-cluster</h3><div class="meta">${fmt(collectionOccurrences(summaryRecord))} occurrences · selecteer een collectie voor details</div><div class="collection-occ-list"></div>`;
@@ -1356,7 +1356,17 @@
     selectedTaxonRecord=taxon;
     $('taxonDetails').innerHTML=`<h2 style="font:800 17px Manrope,sans-serif;margin:0 0 6px">${esc(taxon.nam||'Taxon')}</h2><div class="feature-muted">${esc(taxon.rnk||'Taxon')} · ${esc(taxon.oid||'')}</div><div class="feature-form" style="margin-top:12px"><button class="btn primary" id="applyTaxonFilter" type="button">Toon op kaart</button><button class="btn" id="loadTaxonSynonyms" type="button">Synoniemen</button><button class="btn" id="loadTaxonChildren" type="button">Subtaxa</button></div><div id="taxonHierarchy" class="feature-muted">Taxonomische details ophalen…</div><div id="taxonChildren" class="feature-list" style="margin-top:10px"></div>`;
     $('applyTaxonFilter').addEventListener('click',()=>{$('taxonInput').value=taxon.nam||'';switchView('map');runSearch();});$('loadTaxonSynonyms').addEventListener('click',()=>loadTaxonRelated(taxon,'synonyms'));$('loadTaxonChildren').addEventListener('click',()=>loadTaxonChildren(taxon,0));
-    try{const p=new URLSearchParams({id:taxon.oid,show:'attr,nav,size',vocab:'pbdb'});const response=await fetch(API+'/taxa/single.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),detail=json.records?.[0]||taxon;$('taxonHierarchy').innerHTML=`<div class="feature-muted">${esc(val(detail,'att','author')||'Attributie niet beschikbaar')}</div><div class="feature-muted" style="margin-top:5px">PBDB-id: ${esc(detail.oid||taxon.oid||'—')}</div>`;}catch(error){$('taxonHierarchy').textContent='Extra details niet beschikbaar: '+error.message;}
+    try{
+      const p=new URLSearchParams({id:taxon.oid,show:'attr,nav,size',vocab:'pbdb'});
+      const response=await fetch(API+'/taxa/single.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
+      const json=await response.json(),detail=json.records?.[0]||taxon;
+      const parentSpecs=[['kgn','kgt','Kingdom'],['phn','pht','Phylum'],['cln','clt','Class'],['odn','odt','Order'],['fmn','fmt','Family']];
+      const parents=[];let lastParentId='';
+      parentSpecs.forEach(([idKey,taxonKey,label])=>{const parent=detail[taxonKey],parentId=String(detail[idKey]||'');if(parent&&parentId&&parentId!==String(detail.oid||taxon.oid||'')){parents.push({name:parent.nam||label,rank:parent.rnk||label,id:parent.oid||parentId});lastParentId=parentId;}});
+      if(detail.prt&&String(detail.par||'')!==lastParentId&&String(detail.par||'')!==String(detail.oid||taxon.oid||'')){parents.push({name:detail.prt.nam||'Directe ouder',rank:detail.prt.rnk||'Taxon',id:detail.prt.oid||detail.par||''});}
+      const parentHtml=parents.length?parents.map((parent,index)=>`<div class="feature-row"><span><strong>${esc(parent.name)}</strong><small>${esc(parent.rank)} · PBDB ${esc(parent.id)}</small></span><span>${index===parents.length-1?'Directe ouder':''}</span></div>`).join(''):'<div class="feature-muted">PBDB heeft geen bovenliggende taxa voor deze naam teruggegeven.</div>';
+      $('taxonHierarchy').innerHTML=`<div style="font-weight:700;margin-bottom:6px">Bovenliggende taxa</div>${parentHtml}<div class="feature-muted" style="margin-top:8px">Attributie: ${esc(val(detail,'att','author')||'niet beschikbaar')} · PBDB-id: ${esc(detail.oid||taxon.oid||'—')}</div>`;
+    }catch(error){$('taxonHierarchy').textContent='Taxonomische hiërarchie niet beschikbaar: '+error.message;}
   }
   async function loadTaxonRelated(taxon,relation){
     const target=$('taxonChildren');target.innerHTML='Gegevens ophalen…';
@@ -1375,7 +1385,7 @@
       target.innerHTML=taxonChildrenResultRows.map((item,index)=>`<button class="feature-row" type="button" data-child-index="${index}"><span><strong>${esc(item.nam||'')}</strong><small>${esc(item.rnk||'Taxon')} · ${fmt(num(item.siz)||0)} subtaxa</small></span><span>Open →</span></button>`).join('');
       if(rows.length===100){const more=document.createElement('button');more.type='button';more.className='btn';more.id='moreTaxonChildren';more.textContent='Laad volgende 100 subtaxa';more.addEventListener('click',()=>loadTaxonChildren(taxon,offset+rows.length));target.appendChild(more);}
       if(!taxonChildrenResultRows.length)target.innerHTML='<div class="feature-muted">Geen subtaxa gevonden.</div>';
-    }catch(error){const message=document.createElement('div');message.className='feature-muted';message.textContent='Subtaxa niet beschikbaar: '+error.message;target.appendChild(message);}
+    }catch(error){const more=target.querySelector('#moreTaxonChildren');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Subtaxa niet beschikbaar: '+error.message;target.appendChild(message);}
   }
   async function loadDiversity(){
     if(!map){$('diversityMessage').textContent='Open de kaart eerst om een kaartgebied te kiezen.';return;}$('diversityMessage').textContent='PBDB-diversiteitscurve ophalen…';
