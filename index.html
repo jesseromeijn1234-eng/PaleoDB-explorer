@@ -69,7 +69,31 @@
     .filters-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
     .section-title { font:700 13px 'Manrope',sans-serif; display:flex; gap:9px; align-items:center; }
     .section-title svg { color:var(--teal); width:16px;height:16px; }
-    .filters-grid { display:grid; grid-template-columns: minmax(180px,1.45fr) minmax(145px,1fr) minmax(140px,.9fr) minmax(130px,.8fr) minmax(115px,.72fr); gap:12px; align-items:end; }
+    .filters-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; align-items:end; }
+    .period-strip { display:flex; gap:7px; overflow-x:auto; padding:12px 14px; border-bottom:1px solid #edf0f3; background:#fbfcfd; }
+    .period-chip { flex:0 0 auto; border:1px solid #e2e9ed; border-radius:9px; padding:8px 11px; background:#fff; color:#41566a; font-size:10px; font-weight:700; }
+    .period-chip:hover,.period-chip.active { border-color:#26978d; background:#eaf7f4; color:#117b74; }
+    .period-chip small { display:block; color:#8493a2; font-size:9px; font-weight:500; margin-top:2px; }
+    .feature-grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(260px,.7fr); gap:16px; }
+    .feature-form { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+    .feature-form input,.feature-form select { min-width:180px; flex:1; height:40px; border:1px solid #e2e8ed; border-radius:9px; padding:0 11px; background:#fbfcfd; color:#26394d; font-size:12px; }
+    .feature-list { display:grid; gap:7px; }
+    .feature-row { border:1px solid #e7edf0; border-radius:9px; padding:10px 12px; background:#fff; display:flex; justify-content:space-between; align-items:center; gap:10px; text-align:left; color:#35485d; }
+    .feature-row:hover { border-color:#8bcfc5; background:#f7fcfb; }
+    .feature-row strong { font-size:12px; }
+    .feature-row small { display:block; color:#8794a2; font-size:10px; margin-top:3px; }
+    .feature-muted { color:#8492a0; font-size:11px; line-height:1.5; }
+    .collection-popup { min-width:250px; max-width:340px; font-family:'DM Sans',sans-serif; color:#26394d; }
+    .collection-popup h3 { font:800 14px 'Manrope',sans-serif; margin:0 0 8px; }
+    .collection-popup .meta { color:#738296; font-size:10px; line-height:1.55; margin:4px 0; }
+    .collection-popup .actions { display:flex; gap:7px; margin-top:10px; }
+    .collection-popup button { border:1px solid #dce8e7; background:#eff8f6; color:#147c73; border-radius:7px; padding:7px 9px; font-size:10px; font-weight:700; }
+    .collection-occ-list { max-height:190px; overflow:auto; margin-top:8px; border-top:1px solid #edf0f3; }
+    .collection-occ-list div { padding:6px 0; border-bottom:1px solid #edf0f3; font-size:10px; }
+    .collection-occ-list small { color:#8492a0; display:block; margin-top:2px; }
+    .map-age-legend { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:10px; color:#8290a0; }
+    .age-swatch { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:4px; }
+    @media (max-width: 800px) { .feature-grid{grid-template-columns:1fr}.filters-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
     .field label { display:block; color:#718095; font-size:10px; font-weight:700; letter-spacing:.55px; text-transform:uppercase; margin:0 0 7px 2px; }
     .field input, .field select { height:40px; width:100%; padding:0 11px; border:1px solid #e2e8ed; border-radius:9px; color:#26394d; background:#fbfcfd; outline:none; font-size:12px; min-width:0; }
     .field input:focus, .field select:focus { border-color:#74c5bc; box-shadow:0 0 0 3px #1a9b9114; }
@@ -191,6 +215,8 @@
       <button data-view="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h10l4 4v14H7z"/><path d="M17 3v5h4M10 13h8M10 17h8M10 9h2"/><path d="M3 7v14h12"/></svg>Fossielvondsten</button>
       <button class="active" data-view="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/><circle cx="12" cy="10" r="2"/></svg>Vindplaatsenkaart</button>
       <button data-view="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M5 16l4-5 3 2 6-8"/><path d="M15 5h3v3"/></svg>Geologische tijd</button>
+      <button data-view="taxa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v5m0 0H6v5m6-5h6v5M6 13v4m12-4v4M3 21h6m6 0h6"/></svg>Taxonomie</button>
+      <button data-view="diversity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M5 17l4-6 4 3 6-10"/><path d="M16 4h3v3"/></svg>Diversiteit</button>
     </nav>
     <div class="side-bottom">
       <div class="source-mini"><strong>Databron: PBDB</strong>Openbare paleontologische gegevens uit de officiële Paleobiology Database. Live verbinding, geen account nodig.</div>
@@ -218,6 +244,9 @@
           <div class="field"><label for="regionInput">Regio / continent</label><select id="regionInput"><option value="">Overal ter wereld</option><option value="EUR">Europa</option><option value="NAM">Noord-Amerika</option><option value="SAM">Zuid-Amerika</option><option value="AFR">Afrika</option><option value="ASI">Azië</option><option value="OCE">Oceanië</option><option value="ANT">Antarctica</option><option value="NL">Nederland</option><option value="BE">België</option><option value="DE">Duitsland</option><option value="GB">Verenigd Koninkrijk</option><option value="US">Verenigde Staten</option><option value="CN">China</option></select></div>
           <div class="field"><label for="oldestInput">Oudste grens (Ma)</label><input id="oldestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 145"></div>
           <div class="field"><label for="youngestInput">Jongste grens (Ma)</label><input id="youngestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 66"></div>
+          <div class="field"><label for="stratigraphyInput">Formatie / stratigrafie</label><input id="stratigraphyInput" type="text" placeholder="Bijv. Hell Creek"></div>
+          <div class="field"><label for="authorizerInput">Authorizer ID</label><input id="authorizerInput" type="number" min="1" step="1" placeholder="PBDB persoons-ID"></div>
+          <div class="field"><label for="refAuthorInput">Referentie-auteur</label><input id="refAuthorInput" type="text" placeholder="Bijv. Smith"></div>
         </div>
         <div class="filter-footer"><div class="filter-hint">Zoeken gebruikt alleen het zichtbare kaartgebied. Verschuif of zoom de kaart om een ander gebied te laden.</div><div class="filter-buttons"><button class="btn small" id="resetFilters">Wis filters</button><button class="btn primary small" id="runSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>Toon resultaten</button></div></div>
       </section>
@@ -263,13 +292,28 @@
             <div class="map-search-help">Zoekt plaatsnamen en fossielnamen in de PBDB-database. Geen automatische suggesties: zoeken start pas wanneer je op Enter of Zoeken klikt.</div>
           </div>
           <div class="map-search-results" id="mapSearchResults" hidden aria-live="polite"></div>
+          <div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Geologische tijd wordt geladen…</span></div>
           <div id="map"></div><div class="map-legend"><span><i class="legend-dot"></i> Fossielvindplaats</span><span id="mapCount">0 locaties weergegeven</span><span id="mapAreaStatus">Startgebied: Noord-Holland · laden volgt het zichtbare kaartgebied</span><span style="margin-left:auto">Kaart: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · zoeken: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a></span></div></div>
       </section>
 
       <section class="view" id="view-timeline">
-        <div class="panel"><div class="panel-head"><div><h2>Geologische tijdlijn</h2><p>Hoe zijn de gevonden fossielen verdeeld over miljoenen jaren?</p></div><span class="tag">MA = MILJOEN JAAR GELEDEN</span></div><div class="panel-body"><p class="timeline-note">De grafiek gebruikt de ouderdomsvelden die PBDB voor elke vondst beschikbaar stelt. De oudste vondsten staan links.</p><div style="height:390px;position:relative"><canvas id="timelineChart"></canvas><div class="empty" id="timelineEmpty"><strong>De tijdlijn is nog leeg</strong><span>Voer een zoekopdracht uit om de tijdlijn te vullen.</span></div></div></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Geologische tijdlijn</h2><p>Hoe zijn de gevonden fossielen verdeeld over miljoenen jaren?</p></div><span class="tag">MA = MILJOEN JAAR GELEDEN</span></div><div class="panel-body"><div id="timeScaleBrowser" class="period-strip" style="margin:-6px -5px 16px;border:1px solid #edf0f3;border-radius:10px"><span class="feature-muted">Tijdschaal laden…</span></div><p class="timeline-note">De grafiek gebruikt de ouderdomsvelden die PBDB voor elke vondst beschikbaar stelt. De oudste vondsten staan links.</p><div style="height:390px;position:relative"><canvas id="timelineChart"></canvas><div class="empty" id="timelineEmpty"><strong>De tijdlijn is nog leeg</strong><span>Voer een zoekopdracht uit om de tijdlijn te vullen.</span></div></div></div></div>
       </section>
 
+       <section class="view" id="view-taxa">
+         <div class="feature-grid"><div class="panel"><div class="panel-head"><div><h2>Taxonomie-browser</h2><p>Zoek een taxon en verken ouders, kinderen en synoniemen.</p></div><span class="tag">PBDB TAXA</span></div><div class="panel-body">
+           <form class="feature-form" id="taxaBrowserForm"><input id="taxaBrowserInput" type="search" placeholder="Bijv. Dinosauria, Mammalia, Trilobita…" aria-label="Zoek taxon"><button class="btn primary" type="submit">Zoek taxon</button></form>
+           <div id="taxaBrowserMessage" class="feature-muted">Zoek een taxonnaam om de taxonomische boom te openen.</div><div id="taxaBrowserResults" class="feature-list" style="margin-top:12px"></div>
+         </div></div><div class="panel"><div class="panel-head"><div><h2>Taxoninformatie</h2><p>Naam, rang, synoniemen en hiërarchie.</p></div></div><div class="panel-body" id="taxonDetails"><div class="feature-muted">Selecteer eerst een taxon.</div></div></div></div>
+       </section>
+       <section class="view" id="view-diversity">
+         <div class="panel"><div class="panel-head"><div><h2>Diversiteitsanalyse</h2><p>PBDB quick-diversity voor het zichtbare kaartgebied en de gekozen filters.</p></div><span class="tag">PBDB QUICKDIV</span></div><div class="panel-body">
+           <div class="feature-form"><label class="feature-muted" for="diversityCount">Tellen als</label><select id="diversityCount"><option value="genera">Geslachten</option><option value="species">Soorten</option><option value="families">Families</option><option value="orders">Ordes</option></select><label class="feature-muted" for="diversityResolution">Tijdsresolutie</label><select id="diversityResolution"><option value="stage">Etappe / stage</option><option value="epoch">Tijdvak / epoch</option><option value="period">Periode</option></select><button class="btn primary" id="loadDiversityButton" type="button">Bereken diversiteit</button></div>
+           <div id="diversityMessage" class="feature-muted">De analyse gebruikt de grenzen van je huidige kaartvenster.</div>
+           <div style="height:360px;position:relative;margin-top:12px"><canvas id="diversityChart"></canvas><div class="empty" id="diversityEmpty"><strong>Nog geen diversiteitsgegevens</strong><span>Kies Bereken diversiteit om de PBDB-curve op te halen.</span></div></div>
+         </div></div>
+         <div class="feature-grid" style="margin-top:16px"><div class="panel"><div class="panel-head"><div><h2>Meest voorkomende taxa in beeld</h2><p>PBDB prevalence voor het huidige kaartgebied.</p></div><button class="btn small" id="loadPrevalenceButton" type="button">Vernieuwen</button></div><div class="panel-body"><div id="prevalenceList" class="feature-list"><div class="feature-muted">Nog niet opgehaald.</div></div></div></div><div class="panel"><div class="panel-head"><div><h2>Wat betekent deze analyse?</h2></div></div><div class="panel-body feature-muted">De curve gebruikt PBDB quickdiv. Dit is een database-gebaseerde schatting, geen volledige telling van alle organismen die ooit hebben geleefd.</div></div></div>
+       </section>
       <div class="footer-note">Gegevens en definities zijn afkomstig van de <a href="https://paleobiodb.org/" target="_blank" rel="noopener">Paleobiology Database</a>. Dit is een onafhankelijke interface en geen officiële PBDB-website. Kaartcoördinaten zijn moderne of door PBDB aangeleverde paleogeografische schattingen; niet iedere vondst heeft coördinaten.</div>
     </div>
   </main>
@@ -290,6 +334,14 @@
   let mapCanvas = null, mapCanvasCtx = null, mapCanvasRaf = 0;
   let mapCanvasPoints = [];
   let mapHitBuckets = new Map();
+  let mapCollections = [];
+  let collectionSpatialIndex = new Map();
+  let activeCollectionController = null;
+  let collectionCache = [];
+  let timeScaleRecords = [];
+  let selectedTaxonRecord = null;
+  let diversityChart = null;
+  const SPATIAL_CELL_DEGREES = 1;
   // Coordinate bins let the renderer inspect only records near the current viewport.
   let occurrenceSpatialIndex = { modern: new Map(), paleo: new Map() };
   const SPATIAL_CELL_DEGREES = 1;
@@ -351,7 +403,7 @@
   const getPlace = r => first(val(r,'formation','stratigraphic_formation','state','province','country','continent'),'—');
   const numFormat = v => v===null || v===undefined ? '—' : Number(v).toLocaleString('nl-NL',{maximumFractionDigits:1});
 
-  function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim()}; }
+  function currentFilters() { return {taxon:$('taxonInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim(), stratigraphy:$('stratigraphyInput').value.trim(), authorizer:$('authorizerInput').value.trim(), refAuthor:$('refAuthorInput').value.trim()}; }
   function buildApiUrl(f, bounds=null) {
     const p = new URLSearchParams();
     p.set('vocab','pbdb');
@@ -362,6 +414,9 @@
     if (f.region) p.set('cc',f.region);
     if (f.oldest) p.set('min_ma',f.oldest);
     if (f.youngest) p.set('max_ma',f.youngest);
+    if (f.stratigraphy) p.set('strat',f.stratigraphy+' Fm');
+    if (f.authorizer && /^\\d+$/.test(f.authorizer)) p.set('occs_authent_by',f.authorizer);
+    if (f.refAuthor) p.set('ref_author',f.refAuthor);
     if (bounds) {
       p.set('lngmin',String(bounds.west));
       p.set('lngmax',String(bounds.east));
