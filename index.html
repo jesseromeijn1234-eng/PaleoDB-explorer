@@ -905,24 +905,38 @@
       container.innerHTML=rows.slice(0,100).map(record=>`<div><b>${esc(getTaxon(record))}</b><small>${esc(getInterval(record))} · ${getAge(record)===null?'ouderdom onbekend':numFormat(getAge(record))+' Ma'} · PBDB ${esc(val(record,'occurrence_no','occurrence_id','occ_no','id')||'—')}</small></div>`).join('')+(rows.length>100?`<div class="feature-muted">Toont 100 van ${fmt(rows.length)} occurrences.</div>`:'');
     }catch(error){container.textContent='Occurrences konden niet geladen worden: '+error.message;}
   }
-  function openCollectionMarker(marker) {
+  async function loadSummaryBinCollections(summaryRecord,container,offset=0){
+    if(!container)return;if(offset===0)container.innerHTML='<div class="feature-muted">Collecties ophalen…</div>';
+    const clusterId=first(summaryRecord.oid,summaryRecord.cluster_id,summaryRecord.id);
+    if(!clusterId){container.textContent='PBDB gaf voor deze cluster geen clust-ID terug.';return;}
+    try{
+      const filters=currentFilters(),p=new URLSearchParams({clust_id:String(clusterId),limit:'20',offset:String(offset),show:'ref,loc,time,strat,geo,lith,entname,prot',vocab:'pbdb'});
+      if(filters.taxon)p.set('base_name',filters.taxon);if(filters.interval){const iid=intervalIdForName(filters.interval);if(iid)p.set('interval_id',iid);else p.set('interval',filters.interval);}
+      if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
+      if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);
+      const response=await fetch(API+'/colls/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
+      const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];if(offset===0)container.innerHTML='';
+      rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'PBDB-collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
+      const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
+      if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreSummary='1';more.className='btn small';more.textContent='Laad 20 meer collecties';more.addEventListener('click',()=>{more.disabled=true;loadSummaryBinCollections(summaryRecord,container,shown);});container.appendChild(more);}
+      const count=document.createElement('div');count.className='meta';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' collecties.';container.prepend(count);
+    }catch(error){container.textContent='Collecties konden niet worden geladen: '+error.message;}
+  }
+  function openSummaryBin(summaryRecord){
+    const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(collectionRecordCount(summaryRecord))} collecties in deze PBDB-cluster</h3><div class="meta">${fmt(collectionOccurrences(summaryRecord))} occurrences · selecteer een collectie voor details</div><div class="collection-occ-list"></div>`;
+    loadSummaryBinCollections(summaryRecord,node.querySelector('.collection-occ-list'),0);
+    L.popup({maxWidth:390,maxHeight:430,autoPan:true}).setLatLng([collectionLat(summaryRecord),collectionLng(summaryRecord)]).setContent(node).openOn(map);
+  }
+  function openCollectionMarker(marker){
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});return;}
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===3&&marker.binCount===1){openSummaryBin(marker.records[0]);return;}
+    if(marker.binCount>1){const zoomRoom=map.getMaxZoom()-map.getZoom();if(zoomRoom>0.35){const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);if(spread>4&&marker.maxLat>marker.minLat&&marker.maxLng>marker.minLng)map.fitBounds([[marker.minLat,marker.minLng],[marker.maxLat,marker.maxLng]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});else map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});return;}}
+    if(mapCollectionMode==='summary'){openSummaryBin(marker.records[0]);return;}
     if(marker.count===1){const collection=marker.records[0];L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);return;}
-    const zoomRoom=map.getMaxZoom()-map.getZoom();
-    if(zoomRoom>0.35){
-      const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
-      if(spread>4&&marker.maxLat>marker.minLat&&marker.maxLng>marker.minLng)map.fitBounds([[marker.minLat,marker.minLng],[marker.maxLat,marker.maxLng]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});
-      else map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});
-      return;
-    }
     const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(marker.count)} collecties in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} occurrences · kies een collectie voor details</div><div class="collection-occ-list"></div>`;
     const list=node.querySelector('.collection-occ-list');
-    marker.records.slice(0,50).forEach(collection=>{
-      const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';
-      button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';
-      button.addEventListener('click',()=>{const lat=collectionLat(collection,mapMode==='paleo'),lng=collectionLng(collection,mapMode==='paleo');L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});
-      list.appendChild(button);
-    });
-    if(marker.count>50){const more=document.createElement('div');more.className='meta';more.textContent='Toont 50 van '+fmt(marker.count)+' collecties in deze groep.';list.appendChild(more);}
+    marker.records.slice(0,50).forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' occurrences';button.addEventListener('click',()=>{const lat=collectionLat(collection),lng=collectionLng(collection);if(lat!==null&&lng!==null)L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});list.appendChild(button);});
+    if(marker.records.length>50){const more=document.createElement('div');more.className='meta';more.textContent='Toont 50 kaartrecords in deze groep.';list.appendChild(more);}
     L.popup({maxWidth:390,maxHeight:420,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(node).openOn(map);
   }
   function handleCanvasMapClick(event) {
