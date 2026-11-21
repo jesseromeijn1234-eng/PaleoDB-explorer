@@ -414,8 +414,8 @@
   const getTaxon = r => first(val(r,'taxon_name','accepted_name','identified_name','scientific_name','genus','species'), 'Onbekend taxon');
   const getCollection = r => val(r,'collection_no','collection_id','coll_no','collection');
   const getAge = r => { const a=num(val(r,'max_ma','older_age','max_age','early_age','eag')); const b=num(val(r,'min_ma','younger_age','min_age','late_age','lag')); if(a!==null&&b!==null)return (a+b)/2; return a??b; };
-  const getOld = r => num(val(r,'min_ma','older_age','max_age','early_age'));
-  const getYoung = r => num(val(r,'max_ma','younger_age','min_age','late_age'));
+  const getOld = r => num(val(r,'max_ma','older_age','early_age','eag','max_age'));
+  const getYoung = r => num(val(r,'min_ma','younger_age','late_age','lag','min_age'));
   const getLat = (r, paleo=false) => num(paleo ? val(r,'paleolat','pla','paleo_lat','paleolatitude','paleolatitude_deg') : val(r,'lat','latitude'));
   const getLng = (r, paleo=false) => num(paleo ? val(r,'paleolng','plo','paleo_lng','paleolong','paleolongitude','paleolongitude_deg') : val(r,'lng','longitude','lon'));
   const getInterval = r => { const e=val(r,'early_interval','early_interval_name'); const l=val(r,'late_interval','late_interval_name'); return e&&l&&e!==l?`${e} – ${l}`:first(e,l,val(r,'interval','geological_interval'),'—'); };
