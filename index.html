@@ -960,7 +960,24 @@
   function openCollectionMarker(marker){
     if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});return;}
     if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===3&&marker.binCount===1){openSummaryBin(marker.records[0]);return;}
-    if(marker.binCount>1){const zoomRoom=map.getMaxZoom()-map.getZoom();if(zoomRoom>0.35){const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);if(spread>4&&marker.maxLat>marker.minLat&&marker.maxLng>marker.minLng)map.fitBounds([[marker.minLat,marker.minLng],[marker.maxLat,marker.maxLng]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});else map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});return;}}
+    if(marker.binCount>1){
+      const zoomRoom=map.getMaxZoom()-map.getZoom();
+      if(zoomRoom>0.35){
+        const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
+        const hasLatitudeSpread=Number.isFinite(marker.minLat)&&Number.isFinite(marker.maxLat)&&marker.maxLat-marker.minLat>1e-7;
+        const hasLongitudeSpread=Number.isFinite(marker.minLng)&&Number.isFinite(marker.maxLng)&&marker.maxLng-marker.minLng>1e-7;
+        if(spread>4&&(hasLatitudeSpread||hasLongitudeSpread)){
+          // Fit even when every collection shares one latitude or one longitude.
+          // A tiny padding keeps Leaflet's bounds valid for a one-dimensional spread.
+          const latPad=hasLatitudeSpread?Math.max(0.001,(marker.maxLat-marker.minLat)*0.08):0.001;
+          const lngPad=hasLongitudeSpread?Math.max(0.001,(marker.maxLng-marker.minLng)*0.08):0.001;
+          map.fitBounds([[marker.minLat-latPad,marker.minLng-lngPad],[marker.maxLat+latPad,marker.maxLng+lngPad]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});
+        }else{
+          map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});
+        }
+        return;
+      }
+    }
     if(mapCollectionMode==='summary'){openSummaryBin(marker.records[0]);return;}
     if(marker.count===1){const collection=marker.records[0];L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);return;}
     const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(marker.count)} collecties in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} occurrences · kies een collectie voor details</div><div class="collection-occ-list"></div>`;
@@ -979,13 +996,14 @@
     if(zoom<12) return 44;
     if(zoom<14) return 36;
     if(zoom<16) return 32;
-    return 30;
+    if(zoom<17) return 22;
+    return 16;
   }
 
   function clusterMarkerSize(count,cellSize) {
     if(count===1) return CANVAS_DOT_SIZE;
     const label=fmt(count);
-    return Math.min(cellSize-4,Math.max(24,18+label.length*6));
+    return Math.min(cellSize-2,Math.max(14,16+label.length*5));
   }
 
   function paintMapCanvas() {
