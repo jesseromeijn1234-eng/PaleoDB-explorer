@@ -958,23 +958,28 @@
     L.popup({maxWidth:390,maxHeight:430,autoPan:true}).setLatLng([collectionLat(summaryRecord,currentMapCoordinateMode()),collectionLng(summaryRecord,currentMapCoordinateMode())]).setContent(node).openOn(map);
   }
   function openCollectionMarker(marker){
-    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});return;}
-    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===3&&marker.binCount===1){openSummaryBin(marker.records[0]);return;}
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){
+      map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});
+      return;
+    }
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===3&&marker.binCount===1){
+      openSummaryBin(marker.records[0]);
+      return;
+    }
     if(marker.binCount>1){
       const zoomRoom=map.getMaxZoom()-map.getZoom();
-      if(zoomRoom>0.35){
-        const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
-        const hasLatitudeSpread=Number.isFinite(marker.minLat)&&Number.isFinite(marker.maxLat)&&marker.maxLat-marker.minLat>1e-7;
-        const hasLongitudeSpread=Number.isFinite(marker.minLng)&&Number.isFinite(marker.maxLng)&&marker.maxLng-marker.minLng>1e-7;
-        if(spread>4&&(hasLatitudeSpread||hasLongitudeSpread)){
-          // Fit even when every collection shares one latitude or one longitude.
-          // A tiny padding keeps Leaflet's bounds valid for a one-dimensional spread.
-          const latPad=hasLatitudeSpread?Math.max(0.001,(marker.maxLat-marker.minLat)*0.08):0.001;
-          const lngPad=hasLongitudeSpread?Math.max(0.001,(marker.maxLng-marker.minLng)*0.08):0.001;
-          map.fitBounds([[marker.minLat-latPad,marker.minLng-lngPad],[marker.maxLat+latPad,marker.maxLng+lngPad]],{padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+3),animate:true});
-        }else{
-          map.setView([marker.lat,marker.lng],Math.min(map.getMaxZoom(),map.getZoom()+2),{animate:true});
-        }
+      const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
+      const hasLatitudeSpread=Number.isFinite(marker.minLat)&&Number.isFinite(marker.maxLat)&&marker.maxLat-marker.minLat>1e-7;
+      const hasLongitudeSpread=Number.isFinite(marker.minLng)&&Number.isFinite(marker.maxLng)&&marker.maxLng-marker.minLng>1e-7;
+      // Only zoom when the records are visibly separated on screen.
+      // Co-located or nearly co-located records show their list immediately.
+      if(zoomRoom>0.35&&spread>2&&(hasLatitudeSpread||hasLongitudeSpread)){
+        const latPad=hasLatitudeSpread?Math.max(0.00005,(marker.maxLat-marker.minLat)*0.08):0.00005;
+        const lngPad=hasLongitudeSpread?Math.max(0.00005,(marker.maxLng-marker.minLng)*0.08):0.00005;
+        map.fitBounds(
+          [[marker.minLat-latPad,marker.minLng-lngPad],[marker.maxLat+latPad,marker.maxLng+lngPad]],
+          {padding:[65,65],maxZoom:Math.min(map.getMaxZoom(),map.getZoom()+4),animate:true}
+        );
         return;
       }
     }
@@ -1029,24 +1034,51 @@
     const recordsToPaint=queryCollectionSpatialIndex({south:visibleBounds.getSouth(),north:visibleBounds.getNorth(),west:visibleBounds.getWest(),east:visibleBounds.getEast()},mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false));
     const searchHighlightActive=mapSearchMatchedKeys instanceof Set;
     const cellSize=getClusterCellSize(map.getZoom());
-    const grouped=new Map();
+    const radiusSquared=cellSize*cellSize;
+    const grouped=[];
+    const clusterBuckets=new Map();
     let validCount=0;
     let matchingVisibleCount=0;
 
-    // Group occurrences by nearby screen positions. Every count represents
-    // the exact number of PBDB occurrence records inside that square.
+    // Radius-based clustering avoids the old square-grid edge problem:
+    // nearby points can share a marker across grid boundaries, while points
+    // farther apart than the current zoom radius remain separate.
     for(const entry of recordsToPaint) {
       const record=entry.record;
       const lat=entry.lat;
       const lng=entry.lng;
       const pixel=map.latLngToContainerPoint([lat,lng]);
       if(pixel.x<-CANVAS_HITBOX_SIZE || pixel.y<-CANVAS_HITBOX_SIZE || pixel.x>size.x+CANVAS_HITBOX_SIZE || pixel.y>size.y+CANVAS_HITBOX_SIZE) continue;
-      const key=`${Math.floor(pixel.x/cellSize)}:${Math.floor(pixel.y/cellSize)}`;
-      let group=grouped.get(key);
+
+      const bucketX=Math.floor(pixel.x/cellSize);
+      const bucketY=Math.floor(pixel.y/cellSize);
+      const candidateGroups=new Set();
+      for(let dx=-1;dx<=1;dx++) {
+        for(let dy=-1;dy<=1;dy++) {
+          const bucket=clusterBuckets.get(`${bucketX+dx}:${bucketY+dy}`);
+          if(bucket) bucket.forEach(candidate=>candidateGroups.add(candidate));
+        }
+      }
+
+      let group=null;
+      let nearestDistance=radiusSquared;
+      for(const candidate of candidateGroups) {
+        const centerX=candidate.sumX/candidate.records.length;
+        const centerY=candidate.sumY/candidate.records.length;
+        const dx=pixel.x-centerX;
+        const dy=pixel.y-centerY;
+        const distance=dx*dx+dy*dy;
+        if(distance<=nearestDistance) {
+          nearestDistance=distance;
+          group=candidate;
+        }
+      }
+
       if(!group) {
         group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,collectionCount:0,ageSum:0,ageCount:0};
-        grouped.set(key,group);
+        grouped.push(group);
       }
+
       group.records.push(record);
       group.sumX+=pixel.x; group.sumY+=pixel.y;
       group.sumLat+=lat; group.sumLng+=lng;
@@ -1060,9 +1092,13 @@
       const age=collectionAge(record);if(age!==null){group.ageSum+=age;group.ageCount++;}
       validCount++;
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapCollectionKey(record))) matchingVisibleCount++;
+
+      const bucketKey=`${bucketX}:${bucketY}`;
+      if(!clusterBuckets.has(bucketKey)) clusterBuckets.set(bucketKey,new Set());
+      clusterBuckets.get(bucketKey).add(group);
     }
 
-    for(const group of grouped.values()) {
+    for(const group of grouped) {
       const count=group.collectionCount;
       const x=group.sumX/group.records.length;
       const y=group.sumY/group.records.length;
