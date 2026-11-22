@@ -581,11 +581,11 @@
     $('statRecordsNote').textContent=note || `${fmt(incoming.length)} records geladen uit PBDB voor dit kaartgebied`;
     $('recordsDescription').textContent=`${fmt(filteredRecords.length)} geladen records · huidig kaartgebied · bron: officiële PBDB API`;
   }
-  function collectionId(r){return first(r.oid,r.collection_no,r.collection_id,r.id,'');}
-  function collectionRecordCount(r){return Math.max(1,num(val(r,'nco','collection_count'))||1);}
+  function collectionId(r){return first(r.bin_id,r.cluster_id,r.oid,r.collection_no,r.collection_id,r.id,'');}
+  function collectionRecordCount(r){return Math.max(1,num(val(r,'n_colls','nco','collection_count'))||1);}
   function collectionLat(r,paleo=false){if(paleo==='gplates'){const point=gplatesCoordinates.get(collectionId(r));return point?point.lat:null;}return num(paleo?val(r,'paleolat','paleolatitude','pla'):val(r,'lat','latitude'));}
   function collectionLng(r,paleo=false){if(paleo==='gplates'){const point=gplatesCoordinates.get(collectionId(r));return point?point.lng:null;}return num(paleo?val(r,'paleolng','paleolong','paleolongitude','plo'):val(r,'lng','longitude','lon'));}
-  function collectionOccurrences(r){return num(val(r,'noc','nocc','occurrences'))||0;}
+  function collectionOccurrences(r){return num(val(r,'n_occs','noc','nocc','occurrences'))||0;}
   function currentMapCoordinateMode(){return mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false);}
   function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
   function buildCollectionApiUrl(filters,bounds,summaryLevel=null){
@@ -923,10 +923,10 @@
   }
   function collectionPopupNode(collection) {
     const node=document.createElement('div');node.className='collection-popup';
-    const name=first(val(collection,'nam','name'),'Naamloze PBDB-collectie');
-    const interval=[val(collection,'oei'),val(collection,'oli')].filter(Boolean).join(' – ')||'Tijdvak onbekend';
+    const name=first(val(collection,'collection_name','nam','name'),'Naamloze PBDB-collectie');
+    const interval=[val(collection,'early_interval','oei'),val(collection,'late_interval','oli')].filter(Boolean).join(' – ')||'Tijdvak onbekend';
     const age=collectionAge(collection),formation=first(val(collection,'sfm','sgr','smb','formation'),'—');
-    const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'ref','ref_author'),'Referentie niet beschikbaar');
+    const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'reference_no','ref','ref_author'),'Referentie niet beschikbaar');
     node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> occurrences in deze collectie</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Laad occurrences</button><button type="button" class="collection-filter-name">Filter op formatie</button></div><div class="collection-occ-list" hidden></div>`;
     node.querySelector('.collection-load-occ').addEventListener('click',()=>loadCollectionOccurrences(collection,node.querySelector('.collection-occ-list')));
     node.querySelector('.collection-filter-name').addEventListener('click',()=>{const name=first(val(collection,'sfm'),'');if(!name||name==='—'){notice('Voor deze collectie is geen formatie beschikbaar.');return;}$('stratigraphyInput').value=name;switchView('map');runSearch();});
@@ -952,7 +952,7 @@
   }
   async function loadSummaryBinCollections(summaryRecord,container,offset=0){
     if(!container)return;if(offset===0)container.innerHTML='<div class="feature-muted">Collecties ophalen…</div>';
-    const clusterId=first(summaryRecord.oid,summaryRecord.cluster_id,summaryRecord.id);
+    const clusterId=first(summaryRecord.bin_id,summaryRecord.oid,summaryRecord.cluster_id,summaryRecord.id);
     if(!clusterId){container.textContent='PBDB gaf voor deze cluster geen clust-ID terug.';return;}
     try{
       const filters=currentFilters(),p=new URLSearchParams({clust_id:String(clusterId),limit:'20',offset:String(offset),show:'ref,loc,time,strat,geo,lith,entname,prot',vocab:'pbdb',rowcount:''});
