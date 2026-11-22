@@ -1136,13 +1136,21 @@
       mapHitBuckets.get(bucketKey).push(marker);
 
       if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')){
+        const highlighted=searchHighlightActive&&marker.matchCount>0;
         const hit=document.createElement('button');
         hit.type='button';
         hit.className='pdb-cluster-hit-target';
+        hit.dataset.pdbClusterButton='true';
         hit.setAttribute('aria-label',`${fmt(marker.count)} collecties in deze kaartgroep`);
         hit.title=`${fmt(marker.count)} collecties · klik om de groep te openen`;
         const hitSize=Math.max(34,Math.min(46,marker.size+20));
-        hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;opacity:0;cursor:pointer;pointer-events:auto;`;
+        hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;display:flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;`;
+        const visibleMarker=document.createElement('span');
+        visibleMarker.textContent=fmt(marker.count);
+        visibleMarker.setAttribute('aria-hidden','true');
+        const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(String(fmt(marker.count)).length*.62)));
+        visibleMarker.style.cssText=`display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:${marker.size}px;height:${marker.size}px;border:1.5px solid rgba(255,255,255,.98);outline:2px solid rgba(10,29,42,.9);background:${highlighted?'#f0783f':ageMarkerColour(marker.age)};color:#fff;font:800 ${fontSize}px "DM Sans",sans-serif;line-height:1;text-align:center;`;
+        hit.appendChild(visibleMarker);
         const stopMapGesture=event=>event.stopPropagation();
         hit.addEventListener('pointerdown',stopMapGesture);
         hit.addEventListener('mousedown',stopMapGesture);
