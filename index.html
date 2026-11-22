@@ -344,6 +344,7 @@
   let records = [], filteredRecords = [], currentPage = 1, pageSize = 25;
   let overviewChart = null, timelineChart = null, map = null, mapMode = 'modern';
   let mapCanvas = null, mapCanvasCtx = null, mapCanvasRaf = 0;
+  let mapClusterHitLayer = null;
   let mapCanvasPoints = [];
   let mapHitBuckets = new Map();
   let mapCollections = [];
@@ -866,6 +867,20 @@
     mapCanvas.style.pointerEvents = 'none';
     pane.appendChild(mapCanvas);
     mapCanvasCtx = mapCanvas.getContext('2d', { alpha: true, desynchronized: true });
+
+    // Transparent semantic buttons sit above numbered canvas clusters.
+    // They keep cluster clicks reliable and accessible without blocking map
+    // dragging elsewhere on the map.
+    const hitPane = map.createPane('pdbClusterHitPane');
+    hitPane.style.zIndex = '451';
+    hitPane.style.pointerEvents = 'none';
+    mapClusterHitLayer = document.createElement('div');
+    mapClusterHitLayer.className = 'pdb-cluster-hit-layer';
+    mapClusterHitLayer.style.position = 'absolute';
+    mapClusterHitLayer.style.left = '0';
+    mapClusterHitLayer.style.top = '0';
+    mapClusterHitLayer.style.pointerEvents = 'none';
+    hitPane.appendChild(mapClusterHitLayer);
   }
 
   function requestMapCanvasPaint() {
@@ -1025,6 +1040,12 @@
     mapCanvas.style.height=`${size.y}px`;
     const layerOrigin=map.containerPointToLayerPoint([0,0]);
     L.DomUtil.setPosition(mapCanvas,layerOrigin);
+    if(mapClusterHitLayer){
+      L.DomUtil.setPosition(mapClusterHitLayer,layerOrigin);
+      mapClusterHitLayer.style.width=`${size.x}px`;
+      mapClusterHitLayer.style.height=`${size.y}px`;
+      mapClusterHitLayer.replaceChildren();
+    }
     mapCanvasCtx.setTransform(dpr,0,0,dpr,0,0);
     mapCanvasCtx.clearRect(0,0,size.x,size.y);
 
@@ -1113,6 +1134,27 @@
       const bucketKey=pointBucketKey(x,y);
       if(!mapHitBuckets.has(bucketKey)) mapHitBuckets.set(bucketKey,[]);
       mapHitBuckets.get(bucketKey).push(marker);
+
+      if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')){
+        const hit=document.createElement('button');
+        hit.type='button';
+        hit.className='pdb-cluster-hit-target';
+        hit.setAttribute('aria-label',`${fmt(marker.count)} collecties in deze kaartgroep`);
+        hit.title=`${fmt(marker.count)} collecties · klik om de groep te openen`;
+        const hitSize=Math.max(34,Math.min(46,marker.size+20));
+        hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;opacity:0;cursor:pointer;pointer-events:auto;`;
+        const stopMapGesture=event=>event.stopPropagation();
+        hit.addEventListener('pointerdown',stopMapGesture);
+        hit.addEventListener('mousedown',stopMapGesture);
+        hit.addEventListener('touchstart',stopMapGesture,{passive:true});
+        hit.addEventListener('dblclick',stopMapGesture);
+        hit.addEventListener('click',event=>{
+          event.preventDefault();
+          event.stopPropagation();
+          openCollectionMarker(marker);
+        });
+        mapClusterHitLayer.appendChild(hit);
+      }
 
       const half=marker.size/2;
       const px=Math.round(x-half);
