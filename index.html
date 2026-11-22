@@ -989,21 +989,23 @@
   function handleCanvasMapClick(event) {
     const hits=findCanvasHits(event.containerPoint);if(!hits.length)return;openCollectionMarker(hits[0].point);
   }
+  // Pixel distance between collection points that are allowed to share a marker.
+  // The radius shrinks at each close-up zoom so individual collections separate.
   function getClusterCellSize(zoom) {
     if(zoom<6) return 68;
-    if(zoom<8) return 60;
-    if(zoom<10) return 52;
-    if(zoom<12) return 44;
-    if(zoom<14) return 36;
-    if(zoom<16) return 32;
-    if(zoom<17) return 22;
-    return 16;
+    if(zoom<8) return 52;
+    if(zoom<10) return 36;
+    if(zoom<12) return 24;
+    if(zoom<14) return 15;
+    if(zoom<16) return 10;
+    if(zoom<17) return 7;
+    return 5;
   }
 
   function clusterMarkerSize(count,cellSize) {
     if(count===1) return CANVAS_DOT_SIZE;
     const label=fmt(count);
-    return Math.min(cellSize-2,Math.max(14,16+label.length*5));
+    return Math.min(26,16+label.length*4);
   }
 
   function paintMapCanvas() {
