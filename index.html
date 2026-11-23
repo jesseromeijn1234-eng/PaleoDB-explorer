@@ -1243,7 +1243,7 @@
     const occurrenceTotal=mapCanvasPoints.reduce((sum,marker)=>sum+marker.occurrenceCount,0);
     $('mapCount').textContent=`${fmt(collectionTotal)} vindplaatsen · ${fmt(occurrenceTotal)} fossielen · ${fmt(clusterCount)} groepen`;
     if(mapMode==='paleo') {
-      setMapAreaStatus('Oude plekken van de geladen vindplaatsen · kies 'Locaties van nu' om een ander gebied te laden');
+      setMapAreaStatus('Oude plekken van de geladen vindplaatsen · kies Locaties van nu om een ander gebied te laden');
     } else if(!hasActiveQuery) {
       setMapAreaStatus('Noord-Holland · klaar om het zichtbare kaartgebied te laden');
     } else if(!activeCollectionController) {
