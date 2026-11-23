@@ -1096,11 +1096,12 @@
       }
 
       if(!group) {
-        group={records:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,collectionCount:0,ageSum:0,ageCount:0};
+        group={records:[],points:[],sumX:0,sumY:0,sumLat:0,sumLng:0,minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minLat:Infinity,maxLat:-Infinity,minLng:Infinity,maxLng:-Infinity,matchCount:0,occurrenceCount:0,collectionCount:0,ageSum:0,ageCount:0};
         grouped.push(group);
       }
 
       group.records.push(record);
+      group.points.push({record,lat,lng,x:pixel.x,y:pixel.y});
       group.sumX+=pixel.x; group.sumY+=pixel.y;
       group.sumLat+=lat; group.sumLng+=lng;
       group.minX=Math.min(group.minX,pixel.x); group.maxX=Math.max(group.maxX,pixel.x);
@@ -1115,76 +1116,127 @@
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapCollectionKey(record))) matchingVisibleCount++;
 
       const bucketKey=`${bucketX}:${bucketY}`;
-      if(!clusterBuckets.has(bucketKey)) clusterBuckets.set(bucketKey,new Set());
-      clusterBuckets.get(bucketKey).add(group);
+      if(!clusterBuckets.has(bucketKey)) clusterBuckets.set(buck    const showSeparatePoints=map.getZoom()>=10;
+    for(const group of grouped) {
+      const centerX=group.sumX/group.records.length;
+      const centerY=group.sumY/group.records.length;
+      const shouldSpreadSameSpot=showSeparatePoints&&group.points.length>1;
+      const markers=shouldSpreadSameSpot
+        ? group.points.map((point,index)=>{
+            const total=group.points.length;
+            const angle=(-Math.PI/2)+(index/total)*Math.PI*2;
+            const radius=Math.min(70,Math.max(16,12+total*2));
+            const age=collectionAge(point.record);
+            return {
+              records:[point.record],
+              count:collectionRecordCount(point.record),
+              binCount:1,
+              x:centerX+Math.cos(angle)*radius,
+              y:centerY+Math.sin(angle)*radius,
+              lat:point.lat,
+              lng:point.lng,
+              minX:point.x,maxX:point.x,minY:point.y,maxY:point.y,
+              minLat:point.lat,maxLat:point.lat,minLng:point.lng,maxLng:point.lng,
+              matchCount:searchHighlightActive&&mapSearchMatchedKeys.has(mapCollectionKey(point.record))?1:0,
+              size:CANVAS_DOT_SIZE,
+              occurrenceCount:collectionOccurrences(point.record),
+              age,
+              spiderAnchorX:point.x,
+              spiderAnchorY:point.y
+            };
+          })
+        : [{
+            records:group.records,
+            count:group.collectionCount,
+            binCount:group.records.length,
+            x:centerX,
+            y:centerY,
+            lat:group.sumLat/group.records.length,
+            lng:group.sumLng/group.records.length,
+            minX:group.minX,maxX:group.maxX,minY:group.minY,maxY:group.maxY,
+            minLat:group.minLat,maxLat:group.maxLat,minLng:group.minLng,maxLng:group.maxLng,
+            matchCount:group.matchCount,
+            size:clusterMarkerSize(group.collectionCount,cellSize),
+            occurrenceCount:group.occurrenceCount,
+            age:group.ageCount?group.ageSum/group.ageCount:null
+          }];
+
+      // At zoom 10 and closer, every collection gets its own marker.
+      // Collections with the exact same (or almost same) coordinates are
+      // spread around their real location and connected with thin guide lines.
+      for(const marker of markers) {
+        const count=marker.count;
+        const x=marker.x;
+        const y=marker.y;
+        mapCanvasPoints.push(marker);
+        const bucketKey=pointBucketKey(x,y);
+        if(!mapHitBuckets.has(bucketKey)) mapHitBuckets.set(bucketKey,[]);
+        mapHitBuckets.get(bucketKey).push(marker);
+
+        if(marker.spiderAnchorX!==undefined) {
+          mapCanvasCtx.beginPath();
+          mapCanvasCtx.moveTo(marker.spiderAnchorX,marker.spiderAnchorY);
+          mapCanvasCtx.lineTo(x,y);
+          mapCanvasCtx.lineWidth=1;
+          mapCanvasCtx.strokeStyle='rgba(34,83,105,.55)';
+          mapCanvasCtx.stroke();
+        }
+
+        if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')){
+          const highlighted=searchHighlightActive&&marker.matchCount>0;
+          const hit=document.createElement('button');
+          hit.type='button';
+          hit.className='pdb-cluster-hit-target';
+          hit.dataset.pdbClusterButton='true';
+          hit.setAttribute('aria-label',`${fmt(marker.count)} vindplaatsen in deze groep`);
+          hit.title=`${fmt(marker.count)} vindplaatsen · klik om verder in te zoomen`;
+          const hitSize=Math.max(34,Math.min(46,marker.size+20));
+          hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;display:flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;`;
+          const visibleMarker=document.createElement('span');
+          visibleMarker.textContent=fmt(marker.count);
+          visibleMarker.setAttribute('aria-hidden','true');
+          const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(String(fmt(marker.count)).length*.62)));
+          visibleMarker.style.cssText=`display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:${marker.size}px;height:${marker.size}px;border:1.5px solid rgba(255,255,255,.98);outline:2px solid rgba(10,29,42,.9);background:${highlighted?'#f0783f':ageMarkerColour(marker.age)};color:#fff;font:800 ${fontSize}px "DM Sans",sans-serif;line-height:1;text-align:center;`;
+          hit.appendChild(visibleMarker);
+          const stopMapGesture=event=>event.stopPropagation();
+          hit.addEventListener('pointerdown',stopMapGesture);
+          hit.addEventListener('mousedown',stopMapGesture);
+          hit.addEventListener('touchstart',stopMapGesture,{passive:true});
+          hit.addEventListener('dblclick',stopMapGesture);
+          hit.addEventListener('click',event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openCollectionMarker(marker);
+          });
+          mapClusterHitLayer.appendChild(hit);
+        }
+
+        const half=marker.size/2;
+        const px=Math.round(x-half);
+        const py=Math.round(y-half);
+        const highlighted=searchHighlightActive&&marker.matchCount>0;
+        mapCanvasCtx.globalAlpha=searchHighlightActive&&!highlighted?0.18:1;
+        mapCanvasCtx.fillStyle=highlighted?'#f0783f':ageMarkerColour(marker.age);
+        mapCanvasCtx.lineWidth=3;
+        mapCanvasCtx.strokeStyle='rgba(10,29,42,.9)';
+        mapCanvasCtx.strokeRect(px-1.5,py-1.5,marker.size+3,marker.size+3);
+        mapCanvasCtx.fillRect(px,py,marker.size,marker.size);
+        mapCanvasCtx.lineWidth=1.5;
+        mapCanvasCtx.strokeStyle='rgba(255,255,255,.98)';
+        mapCanvasCtx.strokeRect(px-.5,py-.5,marker.size+1,marker.size+1);
+        if(count>1){
+          const label=fmt(count);
+          const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(label.length*.62)));
+          mapCanvasCtx.fillStyle='#fff';
+          mapCanvasCtx.font=`800 ${fontSize}px "DM Sans",sans-serif`;
+          mapCanvasCtx.textAlign='center';
+          mapCanvasCtx.textBaseline='middle';
+          mapCanvasCtx.fillText(label,x,y+0.5,marker.size-4);
+        }
+      }
     }
 
-    for(const group of grouped) {
-      const count=group.collectionCount;
-      const x=group.sumX/group.records.length;
-      const y=group.sumY/group.records.length;
-      const marker={
-        records:group.records,count:count,binCount:group.records.length,x:x,y:y,summaryMode:mapCollectionMode==='summary',
-        lat:group.sumLat/group.records.length,lng:group.sumLng/group.records.length,
-        minX:group.minX,maxX:group.maxX,minY:group.minY,maxY:group.maxY,
-        minLat:group.minLat,maxLat:group.maxLat,minLng:group.minLng,maxLng:group.maxLng,
-        matchCount:group.matchCount,size:clusterMarkerSize(count,cellSize),occurrenceCount:group.occurrenceCount,age:group.ageCount?group.ageSum/group.ageCount:null
-      };
-      mapCanvasPoints.push(marker);
-      const bucketKey=pointBucketKey(x,y);
-      if(!mapHitBuckets.has(bucketKey)) mapHitBuckets.set(bucketKey,[]);
-      mapHitBuckets.get(bucketKey).push(marker);
-
-      if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')){
-        const highlighted=searchHighlightActive&&marker.matchCount>0;
-        const hit=document.createElement('button');
-        hit.type='button';
-        hit.className='pdb-cluster-hit-target';
-        hit.dataset.pdbClusterButton='true';
-        hit.setAttribute('aria-label',`${fmt(marker.count)} collecties in deze kaartgroep`);
-        hit.title=`${fmt(marker.count)} collecties · klik om de groep te openen`;
-        const hitSize=Math.max(34,Math.min(46,marker.size+20));
-        hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;display:flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;`;
-        const visibleMarker=document.createElement('span');
-        visibleMarker.textContent=fmt(marker.count);
-        visibleMarker.setAttribute('aria-hidden','true');
-        const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(String(fmt(marker.count)).length*.62)));
-        visibleMarker.style.cssText=`display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:${marker.size}px;height:${marker.size}px;border:1.5px solid rgba(255,255,255,.98);outline:2px solid rgba(10,29,42,.9);background:${highlighted?'#f0783f':ageMarkerColour(marker.age)};color:#fff;font:800 ${fontSize}px "DM Sans",sans-serif;line-height:1;text-align:center;`;
-        hit.appendChild(visibleMarker);
-        const stopMapGesture=event=>event.stopPropagation();
-        hit.addEventListener('pointerdown',stopMapGesture);
-        hit.addEventListener('mousedown',stopMapGesture);
-        hit.addEventListener('touchstart',stopMapGesture,{passive:true});
-        hit.addEventListener('dblclick',stopMapGesture);
-        hit.addEventListener('click',event=>{
-          event.preventDefault();
-          event.stopPropagation();
-          openCollectionMarker(marker);
-        });
-        mapClusterHitLayer.appendChild(hit);
-      }
-
-      const half=marker.size/2;
-      const px=Math.round(x-half);
-      const py=Math.round(y-half);
-      const highlighted=searchHighlightActive && marker.matchCount>0;
-      mapCanvasCtx.globalAlpha=searchHighlightActive && !highlighted ? 0.18 : 1;
-      mapCanvasCtx.fillStyle=highlighted?'#f0783f':ageMarkerColour(marker.age);
-      mapCanvasCtx.lineWidth=3;
-      mapCanvasCtx.strokeStyle='rgba(10,29,42,.9)';
-      mapCanvasCtx.strokeRect(px-1.5,py-1.5,marker.size+3,marker.size+3);
-      mapCanvasCtx.fillRect(px,py,marker.size,marker.size);
-      mapCanvasCtx.lineWidth=1.5;
-      mapCanvasCtx.strokeStyle='rgba(255,255,255,.98)';
-      mapCanvasCtx.strokeRect(px-.5,py-.5,marker.size+1,marker.size+1);
-      if(count>1) {
-        const label=fmt(count);
-        const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(label.length*.62)));
-        mapCanvasCtx.fillStyle='#fff';
-        mapCanvasCtx.font=`800 ${fontSize}px "DM Sans",sans-serif`;
-        mapCanvasCtx.textAlign='center';
-        mapCanvasCtx.textBaseline='middle';
-        mapCanvasCtx.fillText(label,x,y+0.5,marker.size-4);
+      mapCanvasCtx.fillText(label,x,y+0.5,marker.size-4);
       }
     }
 
@@ -1242,7 +1294,7 @@
       return;
     }
     if (!map) {
-      map = L.map('map', { worldCopyJump: true, zoomSnap: 0.25, maxZoom: 18, minZoom: 2, preferCanvas: true });
+      map = L.map('map', { worldCopyJump: true, zoomSnap: 1, maxZoom: 18, minZoom: 2, preferCanvas: true });
       map.setView(INITIAL_CENTER, INITIAL_ZOOM);
       updateMapZoomFloor();
       installBaseMapTiles('osm');
