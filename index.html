@@ -1115,8 +1115,16 @@
       validCount++;
       if(searchHighlightActive && mapSearchMatchedKeys.has(mapCollectionKey(record))) matchingVisibleCount++;
 
-      const bucketKey=`${bucketX}:${bucketY}`;
-      if(!clusterBuckets.has(bucketKey)) clusterBuckets.set(buck    const showSeparatePoints=map.getZoom()>=10;
+      const bucketKey=String(bucketX)+':'+String(bucketY);
+      if(!clusterBuckets.has(bucketKey)) clusterBuckets.set(bucketKey,new Set());
+      clusterBuckets.get(bucketKey).add(group);
+    }
+
+    // Up to zoom 9, nearby places are shown as numbered groups.
+    // From zoom 10 onward, each place gets its own marker. When several
+    // records have almost the same coordinates, spread them around the
+    // real spot and draw a line back to it so every marker can be clicked.
+    const showSeparatePoints=map.getZoom()>=10;
     for(const group of grouped) {
       const centerX=group.sumX/group.records.length;
       const centerY=group.sumY/group.records.length;
@@ -1140,7 +1148,7 @@
               matchCount:searchHighlightActive&&mapSearchMatchedKeys.has(mapCollectionKey(point.record))?1:0,
               size:CANVAS_DOT_SIZE,
               occurrenceCount:collectionOccurrences(point.record),
-              age,
+              age:age,
               spiderAnchorX:point.x,
               spiderAnchorY:point.y
             };
@@ -1161,17 +1169,14 @@
             age:group.ageCount?group.ageSum/group.ageCount:null
           }];
 
-      // At zoom 10 and closer, every collection gets its own marker.
-      // Collections with the exact same (or almost same) coordinates are
-      // spread around their real location and connected with thin guide lines.
       for(const marker of markers) {
         const count=marker.count;
         const x=marker.x;
         const y=marker.y;
         mapCanvasPoints.push(marker);
-        const bucketKey=pointBucketKey(x,y);
-        if(!mapHitBuckets.has(bucketKey)) mapHitBuckets.set(bucketKey,[]);
-        mapHitBuckets.get(bucketKey).push(marker);
+        const markerBucket=pointBucketKey(x,y);
+        if(!mapHitBuckets.has(markerBucket)) mapHitBuckets.set(markerBucket,[]);
+        mapHitBuckets.get(markerBucket).push(marker);
 
         if(marker.spiderAnchorX!==undefined) {
           mapCanvasCtx.beginPath();
@@ -1182,32 +1187,27 @@
           mapCanvasCtx.stroke();
         }
 
-        if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')){
-          const highlighted=searchHighlightActive&&marker.matchCount>0;
+        if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')) {
           const hit=document.createElement('button');
           hit.type='button';
           hit.className='pdb-cluster-hit-target';
           hit.dataset.pdbClusterButton='true';
-          hit.setAttribute('aria-label',`${fmt(marker.count)} vindplaatsen in deze groep`);
-          hit.title=`${fmt(marker.count)} vindplaatsen · klik om verder in te zoomen`;
+          hit.setAttribute('aria-label',fmt(marker.count)+' vindplaatsen in deze groep');
+          hit.title=fmt(marker.count)+' vindplaatsen · klik om verder in te zoomen';
           const hitSize=Math.max(34,Math.min(46,marker.size+20));
-          hit.style.cssText=`position:absolute;left:${x-hitSize/2}px;top:${y-hitSize/2}px;width:${hitSize}px;height:${hitSize}px;display:flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;`;
+          hit.style.cssText='position:absolute;left:'+(x-hitSize/2)+'px;top:'+(y-hitSize/2)+'px;width:'+hitSize+'px;height:'+hitSize+'px;display:flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;';
           const visibleMarker=document.createElement('span');
           visibleMarker.textContent=fmt(marker.count);
           visibleMarker.setAttribute('aria-hidden','true');
           const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(String(fmt(marker.count)).length*.62)));
-          visibleMarker.style.cssText=`display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:${marker.size}px;height:${marker.size}px;border:1.5px solid rgba(255,255,255,.98);outline:2px solid rgba(10,29,42,.9);background:${highlighted?'#f0783f':ageMarkerColour(marker.age)};color:#fff;font:800 ${fontSize}px "DM Sans",sans-serif;line-height:1;text-align:center;`;
+          visibleMarker.style.cssText='display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:'+marker.size+'px;height:'+marker.size+'px;border:1.5px solid rgba(255,255,255,.98);outline:2px solid rgba(10,29,42,.9);background:'+(marker.matchCount>0?'#f0783f':ageMarkerColour(marker.age))+';color:#fff;font:800 '+fontSize+'px "DM Sans",sans-serif;line-height:1;text-align:center;';
           hit.appendChild(visibleMarker);
           const stopMapGesture=event=>event.stopPropagation();
           hit.addEventListener('pointerdown',stopMapGesture);
           hit.addEventListener('mousedown',stopMapGesture);
           hit.addEventListener('touchstart',stopMapGesture,{passive:true});
           hit.addEventListener('dblclick',stopMapGesture);
-          hit.addEventListener('click',event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            openCollectionMarker(marker);
-          });
+          hit.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openCollectionMarker(marker);});
           mapClusterHitLayer.appendChild(hit);
         }
 
@@ -1224,22 +1224,17 @@
         mapCanvasCtx.lineWidth=1.5;
         mapCanvasCtx.strokeStyle='rgba(255,255,255,.98)';
         mapCanvasCtx.strokeRect(px-.5,py-.5,marker.size+1,marker.size+1);
-        if(count>1){
+        if(count>1) {
           const label=fmt(count);
           const fontSize=Math.max(8,Math.min(13,(marker.size-8)/(label.length*.62)));
           mapCanvasCtx.fillStyle='#fff';
-          mapCanvasCtx.font=`800 ${fontSize}px "DM Sans",sans-serif`;
+          mapCanvasCtx.font='800 '+fontSize+'px "DM Sans",sans-serif';
           mapCanvasCtx.textAlign='center';
           mapCanvasCtx.textBaseline='middle';
           mapCanvasCtx.fillText(label,x,y+0.5,marker.size-4);
         }
       }
     }
-
-      mapCanvasCtx.fillText(label,x,y+0.5,marker.size-4);
-      }
-    }
-
     mapCanvasCtx.globalAlpha=1;
     mapCanvasCtx.textAlign='start';
     mapCanvasCtx.textBaseline='alphabetic';
