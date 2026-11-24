@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101b2a" />
-  <meta name="paleodb-build" content="2026-11-24-leaflet-2d-rendering-fix" />
+  <meta name="paleodb-build" content="2026-11-24-leaflet-tile-visibility-fix" />
   <meta name="description" content="Een overzichtelijke explorer voor fossielvondsten en paleobiologische gegevens uit de Paleobiology Database." />
   <title>PaleoDB Explorer · snelle kaartweergave</title>
   <!-- Build: 2026-11-20-performance-v6 -->
@@ -150,13 +150,11 @@
     /* Keep raster map tiles fully visible in Chrome, including GPUs where
        Leaflet's plus-lighter workaround makes tile layers render black. */
     #map.leaflet-container { background:#e8eef0 !important; }
+    /* Do not force loading/failed tiles to display: Leaflet hides them
+       until the image has actually loaded. Keep only safe rendering overrides. */
     #map .leaflet-tile-pane,
     #map .leaflet-tile-container,
-    #map img.leaflet-tile {
-      opacity:1 !important;
-      visibility:visible !important;
-      filter:none !important;
-    }
+    #map img.leaflet-tile { filter:none !important; }
     #map img.leaflet-tile { mix-blend-mode:normal !important; }
     #map .pdb-map-canvas { background:transparent !important; }
     .content.map-focused:not(.filters-open) > .filters, .content.map-focused:not(.filters-open) > .quick-presets { display:none; }
