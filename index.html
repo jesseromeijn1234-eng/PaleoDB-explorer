@@ -290,7 +290,7 @@
       </section>
 
       <section class="view active" id="view-map">
-        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Start in Noord-Holland · toont plekken in het zichtbare gebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn" type="button">Locaties van nu</button><button id="paleoMapBtn" type="button" title="Gebruik de paleocoördinaten die PBDB bij de vindplaats opslaat">PBDB-paleo</button><button id="gplatesMapBtn" type="button" title="Bereken oude locaties met het geselecteerde GPlates-model">GPlates</button></div></div></div>
+        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Start in Noord-Holland · toont plekken in het zichtbare gebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn">Locaties van nu</button><button id="paleoMapBtn">Oude ligging</button><button id="gplatesMapBtn">Oude ligging</button></div></div></div>
           <div class="map-search-wrap">
             <div class="map-search-form" role="search">
               <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een plaats, fossiel, gesteentelaag of nummer…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
@@ -352,6 +352,8 @@
   let gplatesCoordinates = new Map();
   let gplatesReconstructionAge = null;
   const SAVED_MAP_VIEWS_KEY = 'paleodb-explorer-saved-views-v1';
+  let mapCollectionMode = 'collections';
+  let mapCollectionSummaryLevel = null;
   let activeCollectionController = null;
   let collectionCache = [];
   let timeScaleRecords = [];
@@ -586,16 +588,15 @@
   function collectionOccurrences(r){return num(val(r,'n_occs','noc','nocc','occurrences'))||0;}
   function currentMapCoordinateMode(){return mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false);}
   function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
-  function buildCollectionApiUrl(filters,bounds){
-    // Always request the full collection list for the visible map area.
-    // Clustering is done locally so displayed group counts stay exact at every zoom.
-    const p=new URLSearchParams({vocab:'pbdb',limit:'all',show:'loc,time,strat,geo,lith,ref,entname,prot,paleoloc'});
+  function buildCollectionApiUrl(filters,bounds,summaryLevel=null){
+    const p=new URLSearchParams({vocab:'pbdb',show:summaryLevel?'time':'loc,time,strat,geo,lith,ref,entname,prot,paleoloc'});
+    if(summaryLevel)p.set('level',String(summaryLevel));else p.set('limit','all');
     if(filters.soortgroep)p.set('base_name',filters.soortgroep);
     if(filters.interval){const id=intervalIdForName(filters.interval);if(id)p.set('interval_id',id);else p.set('interval',filters.interval);}
     if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
     if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);if(filters.researchGroup)p.set('research_group',filters.researchGroup);
     p.set('lngmin',String(bounds.west));p.set('lngmax',String(bounds.east));p.set('latmin',String(bounds.south));p.set('latmax',String(bounds.north));p.set('rowcount','');
-    return API+'/colls/list.json?'+p.toString();
+    return API+(summaryLevel?'/colls/summary.json?':'/colls/list.json?')+p.toString();
   }
 
   function cacheCollectionArea(filtersKey,bounds,records){
@@ -628,30 +629,34 @@
       for(let latCell=minLat;latCell<=maxLat;latCell++)for(const lngCell of cells)for(const entry of index.get(`${latCell}:${lngCell}`)||[]){if(seen.has(entry.record))continue;seen.add(entry.record);if(boundsContainCoordinate(bounds,entry.lat,entry.lng))out.push(entry);}
     }return out;
   }
-  function setMapCollections(incoming){
+  function setMapCollections(incoming,summaryLevel=null){
+    mapCollectionMode=summaryLevel?'summary':'collections';mapCollectionSummaryLevel=summaryLevel;
     const seen=new Set();mapCollections=incoming.filter(r=>{const id=collectionId(r);if(id&&seen.has(id))return false;if(id)seen.add(id);return collectionLat(r)!==null&&collectionLng(r)!==null;});
     buildCollectionSpatialIndex(mapCollections);requestMapCanvasPaint();
     const collectionTotal=mapCollections.reduce((sum,r)=>sum+collectionRecordCount(r),0),occurrenceTotal=mapCollections.reduce((sum,r)=>sum+collectionOccurrences(r),0);
-    $('mapAreaStatus').textContent=fmt(collectionTotal)+' vindplaatsen · '+fmt(occurrenceTotal)+' fossielen';
+    $('mapAreaStatus').textContent=fmt(collectionTotal)+' vindplaatsen · '+fmt(occurrenceTotal)+' fossielen'+(summaryLevel?' · grote groepen vindplaatsen':'');
   }
-  async function loadViewportCollections({useCache=true}={}){
+  async function loadViewportCollections({useCache=true,forceDetailed=false}={}){
     if(mapMode==='gplates'){gplatesCoordinates.clear();gplatesReconstructionAge=null;mapMode='modern';$('modernMapBtn').classList.add('active');$('paleoMapBtn').classList.remove('active');$('gplatesMapBtn').classList.remove('active');buildCollectionSpatialIndex(mapCollections);}
-    const filters=currentFilters(),bounds=getViewportQueryBounds(),key=JSON.stringify(filters);
+    const filters=currentFilters(),bounds=getViewportQueryBounds(),zoom=map?map.getZoom():INITIAL_ZOOM;
+    const hasFilters=Object.values(filters).some(value=>String(value||'').trim()!=='');
+    const summaryLevel=forceDetailed||zoom>=7?null:(zoom<4&&!hasFilters?2:3);
+    const key=JSON.stringify({filters,summaryLevel});
     if(activeCollectionController){activeCollectionController.abort();activeCollectionController=null;}
-    if(useCache){const cached=readCollectionCache(key,bounds);if(cached){setMapCollections(cached);setStatus('Vindplaatsen uit eerder opgehaalde gegevens');return cached;}}
+    if(useCache){const cached=readCollectionCache(key,bounds);if(cached){setMapCollections(cached,summaryLevel);setStatus(summaryLevel?'Groepen uit eerder opgehaalde gegevens':'Vindplaatsen uit eerder opgehaalde gegevens');return cached;}}
     const controller=new AbortController();activeCollectionController=controller;
-    $('mapAreaStatus').textContent='Alle vindplaatsen in het zichtbare kaartgebied ophalen…';
-    const timeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},120000);
+    $('mapAreaStatus').textContent=summaryLevel?'Grote groepen vindplaatsen ophalen…':'Vindplaatsen ophalen…';
+    const timeout=setTimeout(()=>{controller.timedOut=true;controller.abort();},60000);
     try{
-      const response=await fetch(buildCollectionApiUrl(filters,bounds),{headers:{'Accept':'application/json'},signal:controller.signal});
-      if(!response.ok)throw new Error('PBDB vindplaatsen gaf HTTP '+response.status);
+      const response=await fetch(buildCollectionApiUrl(filters,bounds,summaryLevel),{headers:{'Accept':'application/json'},signal:controller.signal});
+      if(!response.ok)throw new Error('PBDB '+(summaryLevel?'clusters':'vindplaatsen')+' gaf HTTP '+response.status);
       const json=await response.json();if(json.error)throw new Error(typeof json.error==='string'?json.error:'PBDB kon de kaartgegevens niet ophalen.');
-      if(!Array.isArray(json.records))throw new Error('PBDB stuurde geen geldige lijst met vindplaatsen terug.');
+      if(!Array.isArray(json.records))throw new Error('PBDB stuurde geen geldige kaartgegevens terug.');
       if(activeCollectionController!==controller)return;
-      setMapCollections(json.records);cacheCollectionArea(key,bounds,mapCollections);setStatus('Alle vindplaatsen opgehaald uit PBDB');return mapCollections;
+      setMapCollections(json.records,summaryLevel);cacheCollectionArea(key,bounds,mapCollections);setStatus(summaryLevel?'Groepen opgehaald uit PBDB':'Vindplaatsen opgehaald uit PBDB');return mapCollections;
     }catch(error){
       if(activeCollectionController!==controller)return;
-      if(error.name==='AbortError'){if(controller.timedOut){$('mapAreaStatus').textContent='PBDB-kaartaanvraag duurde langer dan 120 seconden';notice('PBDB reageerde niet binnen 120 seconden. Probeer het opnieuw of verklein het kaartgebied door iets in te zoomen.','error');}}
+      if(error.name==='AbortError'){if(controller.timedOut){$('mapAreaStatus').textContent='PBDB-kaartaanvraag duurde langer dan 60 seconden';notice('PBDB reageerde niet binnen 60 seconden. Zoom iets verder in en probeer opnieuw.','error');}}
       else{setStatus('Kaartgegevens niet bereikbaar',false);$('mapAreaStatus').textContent='Kaartgegevens konden niet worden opgehaald';notice(error.message,'error');}
     }finally{clearTimeout(timeout);if(activeCollectionController===controller)activeCollectionController=null;}
   }
@@ -945,13 +950,44 @@
       const count=document.createElement('div');count.className='meta';count.dataset.occurrenceCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' fossielen.';container.prepend(count);
     }catch(error){const more=container.querySelector('[data-more-occurrences]');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Fossielen konden niet worden geladen: '+error.message;container.appendChild(message);}
   }
+  async function loadSummaryBinCollections(summaryRecord,container,offset=0){
+    if(!container)return;if(offset===0)container.innerHTML='<div class="feature-muted">Vindplaatsen ophalen…</div>';
+    const clusterId=first(summaryRecord.bin_id,summaryRecord.oid,summaryRecord.cluster_id,summaryRecord.id);
+    if(!clusterId){container.textContent='PBDB gaf voor deze cluster geen clust-ID terug.';return;}
+    try{
+      const filters=currentFilters(),p=new URLSearchParams({clust_id:String(clusterId),limit:'20',offset:String(offset),show:'ref,loc,time,strat,geo,lith,entname,prot',vocab:'pbdb',rowcount:''});
+      if(filters.soortgroep)p.set('base_name',filters.soortgroep);if(filters.interval){const iid=intervalIdForName(filters.interval);if(iid)p.set('interval_id',iid);else p.set('interval',filters.interval);}
+      if(filters.region)p.set('cc',filters.region);if(filters.oldest)p.set('min_ma',filters.oldest);if(filters.youngest)p.set('max_ma',filters.youngest);
+      if(filters.stratigraphy)p.set('strat',filters.stratigraphy+' Fm');if(filters.authorizer&&/^[0-9]+$/.test(filters.authorizer))p.set('occs_authent_by',filters.authorizer);if(filters.refAuthor)p.set('ref_author',filters.refAuthor);if(filters.researchGroup)p.set('research_group',filters.researchGroup);
+      const response=await fetch(API+'/colls/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);
+      const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];if(offset===0)container.innerHTML='';
+      rows.forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'vindplaats')+' · '+fmt(collectionOccurrences(collection))+' fossielen';button.addEventListener('click',()=>{const lat=collectionLat(collection,currentMapCoordinateMode()),lng=collectionLng(collection,currentMapCoordinateMode());if(lat===null||lng===null)return;L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});container.appendChild(button);});
+      const previous=container.querySelector('[data-more-summary]');if(previous)previous.remove();const oldCount=container.querySelector('[data-summary-count]');if(oldCount)oldCount.remove();const total=num(json.records_found)||rows.length,shown=offset+rows.length;
+      if(shown<total){const more=document.createElement('button');more.type='button';more.dataset.moreSummary='1';more.className='btn small';more.textContent='Laad 20 meer vindplaatsen';more.addEventListener('click',()=>{more.disabled=true;loadSummaryBinCollections(summaryRecord,container,shown);});container.appendChild(more);}
+      const count=document.createElement('div');count.className='meta';count.dataset.summaryCount='1';count.textContent='Toont '+fmt(Math.min(shown,total))+' van '+fmt(total)+' vindplaatsen.';container.prepend(count);
+    }catch(error){const more=container.querySelector('[data-more-summary]');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Collecties konden niet worden geladen: '+error.message;container.appendChild(message);}
+  }
+  function openSummaryBin(summaryRecord){
+    const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(collectionRecordCount(summaryRecord))} vindplaatsen in deze groep</h3><div class="meta">${fmt(collectionOccurrences(summaryRecord))} fossielen · selecteer een vindplaats voor details</div><div class="collection-occ-list"></div>`;
+    loadSummaryBinCollections(summaryRecord,node.querySelector('.collection-occ-list'),0);
+    L.popup({maxWidth:390,maxHeight:430,autoPan:true}).setLatLng([collectionLat(summaryRecord,currentMapCoordinateMode()),collectionLng(summaryRecord,currentMapCoordinateMode())]).setContent(node).openOn(map);
+  }
   function openCollectionMarker(marker){
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===2){
+      map.setView([marker.lat,marker.lng],Math.max(5,map.getZoom()+2),{animate:true});
+      return;
+    }
+    if(mapCollectionMode==='summary'&&mapCollectionSummaryLevel===3&&marker.binCount===1){
+      openSummaryBin(marker.records[0]);
+      return;
+    }
     if(marker.binCount>1){
       const zoomRoom=map.getMaxZoom()-map.getZoom();
       const spread=Math.max(marker.maxX-marker.minX,marker.maxY-marker.minY);
       const hasLatitudeSpread=Number.isFinite(marker.minLat)&&Number.isFinite(marker.maxLat)&&marker.maxLat-marker.minLat>1e-7;
       const hasLongitudeSpread=Number.isFinite(marker.minLng)&&Number.isFinite(marker.maxLng)&&marker.maxLng-marker.minLng>1e-7;
-      // Separate real locations by zooming; co-located locations open a complete list.
+      // Only zoom when the records are visibly separated on screen.
+      // Co-located or nearly co-located records show their list immediately.
       if(zoomRoom>0.35&&spread>2&&(hasLatitudeSpread||hasLongitudeSpread)){
         const latPad=hasLatitudeSpread?Math.max(0.00005,(marker.maxLat-marker.minLat)*0.08):0.00005;
         const lngPad=hasLongitudeSpread?Math.max(0.00005,(marker.maxLng-marker.minLng)*0.08):0.00005;
@@ -962,51 +998,12 @@
         return;
       }
     }
-    if(marker.count===1&&marker.records.length===1){
-      const collection=marker.records[0];
-      L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);
-      return;
-    }
-    const node=document.createElement('div');
-    node.className='collection-popup';
-    node.innerHTML=`<h3>${fmt(marker.count)} vindplaatsen in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} fossielen · kies een vindplaats voor details</div><div class="collection-occ-list"></div>`;
+    if(mapCollectionMode==='summary'){openSummaryBin(marker.records[0]);return;}
+    if(marker.count===1){const collection=marker.records[0];L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(collectionPopupNode(collection)).openOn(map);return;}
+    const node=document.createElement('div');node.className='collection-popup';node.innerHTML=`<h3>${fmt(marker.count)} vindplaatsen in deze groep</h3><div class="meta">Samen ${fmt(marker.occurrenceCount)} fossielen · kies een vindplaats voor details</div><div class="collection-occ-list"></div>`;
     const list=node.querySelector('.collection-occ-list');
-    let offset=0;
-    const renderNextPage=()=>{
-      const previousCount=list.querySelector('[data-group-count]');
-      if(previousCount)previousCount.remove();
-      const previousMore=list.querySelector('[data-more-group]');
-      if(previousMore)previousMore.remove();
-      const page=marker.records.slice(offset,offset+50);
-      page.forEach(collection=>{
-        const button=document.createElement('button');
-        button.type='button';
-        button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';
-        button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' fossielen';
-        button.addEventListener('click',()=>{
-          const mode=currentMapCoordinateMode();
-          const lat=collectionLat(collection,mode),lng=collectionLng(collection,mode);
-          if(lat!==null&&lng!==null)L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);
-        });
-        list.appendChild(button);
-      });
-      offset+=page.length;
-      const count=document.createElement('div');
-      count.className='meta';
-      count.dataset.groupCount='1';
-      count.textContent='Toont '+fmt(offset)+' van '+fmt(marker.records.length)+' vindplaatsen.';
-      list.appendChild(count);
-      if(offset<marker.records.length){
-        const more=document.createElement('button');
-        more.type='button';
-        more.dataset.moreGroup='1';
-        more.className='btn small';
-        more.textContent='Laad 50 meer vindplaatsen';
-        more.addEventListener('click',()=>{more.disabled=true;renderNextPage();});
-        list.appendChild(more);
-      }
-    };
-    renderNextPage();
+    marker.records.slice(0,50).forEach(collection=>{const button=document.createElement('button');button.type='button';button.style.cssText='display:block;width:100%;text-align:left;margin:4px 0';button.textContent=first(val(collection,'nam','name'),'Collectie')+' · '+fmt(collectionOccurrences(collection))+' fossielen';button.addEventListener('click',()=>{const lat=collectionLat(collection,currentMapCoordinateMode()),lng=collectionLng(collection,currentMapCoordinateMode());if(lat!==null&&lng!==null)L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);});list.appendChild(button);});
+    if(marker.records.length>50){const more=document.createElement('div');more.className='meta';more.textContent='Toont 50 kaartrecords in deze groep.';list.appendChild(more);}
     L.popup({maxWidth:390,maxHeight:420,autoPan:true}).setLatLng([marker.lat,marker.lng]).setContent(node).openOn(map);
   }
   function handleCanvasMapClick(event) {
@@ -1190,7 +1187,7 @@
           mapCanvasCtx.stroke();
         }
 
-        if(mapClusterHitLayer&&marker.binCount>1) {
+        if(mapClusterHitLayer&&(marker.binCount>1||mapCollectionMode==='summary')) {
           const hit=document.createElement('button');
           hit.type='button';
           hit.className='pdb-cluster-hit-target';
@@ -1368,6 +1365,7 @@
     const collection=mapCollectionSearchResults[index];if(!collection)return;
     const lat=collectionLat(collection,currentMapCoordinateMode()),lng=collectionLng(collection,currentMapCoordinateMode());if(lat===null||lng===null)return;
     map.flyTo([lat,lng],Math.max(13,map.getZoom()),{duration:.55});
+    if(mapCollectionMode==='summary'){openSummaryBin(collection);return;}
     L.popup({maxWidth:370,maxHeight:400,autoPan:true}).setLatLng([lat,lng]).setContent(collectionPopupNode(collection)).openOn(map);
   }
   async function geocodeMapQuery(query) {
@@ -1563,7 +1561,7 @@
   function loadSavedMapView(index){const item=readSavedMapViews()[index];if(!item||!map)return;const f=item.filters||{};$('soortgroepInput').value=f.soortgroep||f.taxon||'';$('intervalInput').value=f.interval||'';$('regionInput').value=f.region||'';$('oldestInput').value=f.oldest||'';$('youngestInput').value=f.youngest||'';$('stratigraphyInput').value=f.stratigraphy||'';$('authorizerInput').value=f.authorizer||'';$('refAuthorInput').value=f.refAuthor||'';$('researchGroupInput').value=f.researchGroup||'';resetGPlatesMode();hasActiveQuery=true;map.setView(item.center,clamp(Number(item.zoom)||INITIAL_ZOOM,map.getMinZoom(),map.getMaxZoom()),{animate:true});setTimeout(()=>loadViewportCollections({useCache:true}),180);}
   function deleteSavedMapView(index){const items=readSavedMapViews();if(!Number.isInteger(index)||index<0||index>=items.length)return;items.splice(index,1);try{localStorage.setItem(SAVED_MAP_VIEWS_KEY,JSON.stringify(items));renderSavedMapViews();notice('Opgeslagen kaartgebied verwijderd.','success');}catch(error){notice('Verwijderen niet mogelijk: '+error.message,'error');}}
   async function reconstructWithGPlates(){
-    if(!map)return;if(map.getZoom()<7){$('gplatesStatus').textContent='Zoomniveau 7 of hoger nodig.';notice('Zoom tot niveau 7 of hoger om het GPlates-model op de zichtbare vindplaatsen te berekenen.');return;}
+    if(!map)return;if(mapCollectionMode==='summary'||map.getZoom()<7){$('gplatesStatus').textContent='Zoom in tot individuele vindplaatsen geladen zijn.';notice('GPlates-model werkt op echte vindplaatscoördinaten. Zoom in en probeer opnieuw.');return;}
     const age=num($('gplatesAgeInput').value),model=$('gplatesRekenmodel').value,maxAgeByRekenmodel={ZAHIROVIC2022:410,MULLER2022:1000,MERDITH2021:1000,PALEOMAP:1100,CAO2024:1800,MULLER2019:250},maxAge=maxAgeByRekenmodel[model];if(age===null||age<0||!maxAge||age>maxAge){$('gplatesStatus').textContent='Dit model ondersteunt ouderdommen van 0 tot '+(maxAge||'een onbekende bovengrens')+' Ma.';notice('De gekozen ouderdom valt buiten het bereik van het geselecteerde GPlates-model.');return;}
     const rows=mapCollections.filter(record=>collectionId(record)&&collectionLat(record)!==null&&collectionLng(record)!==null);if(!rows.length){$('gplatesStatus').textContent='Geen vindplaatscoördinaten beschikbaar.';return;}
     $('runGplatesButton').disabled=true;$('gplatesStatus').textContent='GPlates berekent oude plekken voor '+fmt(rows.length)+' vindplaatsen…';const next=new Map();
