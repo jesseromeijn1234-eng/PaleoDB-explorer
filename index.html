@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101b2a" />
-  <meta name="paleodb-build" content="2026-11-24-leaflet-tile-visibility-fix" />
+  <meta name="paleodb-build" content="2026-11-24-full-map-audit-fix" />
   <meta name="description" content="Een overzichtelijke explorer voor fossielvondsten en paleobiologische gegevens uit de Paleobiology Database." />
   <title>PaleoDB Explorer · snelle kaartweergave</title>
   <!-- Build: 2026-11-20-performance-v6 -->
@@ -147,16 +147,9 @@
     .map-panel { overflow:hidden; }
     #map { height:560px; width:100%; background:#e8eef0; z-index:1; }
     .leaflet-container { font-family:"DM Sans",sans-serif; background:#e8eef0; }
-    /* Keep raster map tiles fully visible in Chrome, including GPUs where
-       Leaflet's plus-lighter workaround makes tile layers render black. */
+    /* Leaflet controls tile visibility and its Chrome-safe blend mode itself. */
     #map.leaflet-container { background:#e8eef0 !important; }
-    /* Do not force loading/failed tiles to display: Leaflet hides them
-       until the image has actually loaded. Keep only safe rendering overrides. */
-    #map .leaflet-tile-pane,
-    #map .leaflet-tile-container,
-    #map img.leaflet-tile { filter:none !important; }
-    #map img.leaflet-tile { mix-blend-mode:normal !important; }
-    #map .pdb-map-canvas { background:transparent !important; }
+    #map .pdb-map-canvas { background:transparent !important; mix-blend-mode:normal; }
     .content.map-focused:not(.filters-open) > .filters, .content.map-focused:not(.filters-open) > .quick-presets { display:none; }
     .map-toolbar { display:flex;gap:7px;align-items:center; }
     .segmented { display:flex;gap:3px;background:#f0f3f5;padding:3px;border-radius:9px; }
@@ -300,7 +293,7 @@
       </section>
 
       <section class="view active" id="view-map">
-        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Start in Noord-Holland · toont plekken in het zichtbare gebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn">Locaties van nu</button><button id="paleoMapBtn">Oude ligging</button><button id="gplatesMapBtn">Oude ligging</button></div></div></div>
+        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Start in Noord-Holland · toont plekken in het zichtbare gebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn">Locaties van nu</button><button id="paleoMapBtn">PBDB-paleocoördinaten</button><button id="gplatesMapBtn">GPlates-reconstructie</button></div></div></div>
           <div class="map-search-wrap">
             <div class="map-search-form" role="search">
               <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een plaats, fossiel, gesteentelaag of nummer…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
@@ -344,7 +337,6 @@
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Details van de vondst</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
 <div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt deze website</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek een soort of groep</strong><p>Vul bijvoorbeeld Tyrannosaurus of Trilobita in. De zoekopdracht neemt ook de groepen daaronder mee.</p></div><div class="help-card"><strong>⏳ Kies een tijd</strong><p>Kies een tijdvak of vul in hoeveel miljoen jaar geleden je wilt zoeken.</p></div><div class="help-card"><strong>🌍 Bekijk de kaart</strong><p>De kaart opent in Noord-Holland. Als je verschuift of inzoomt, worden de vindplaatsen in dat gebied opgehaald. Vanaf zoomniveau 10 zie je elke vindplaats apart. Vindplaatsen op bijna dezelfde plek worden uit elkaar gezet met een lijntje naar hun echte locatie.</p></div></div><p class="footer-note">Op de kaart worden plekken die dicht bij elkaar liggen samengevoegd. Klik op een groep om verder in te zoomen. Vanaf zoomniveau 10 zie je losse punten. Plekken met dezelfde coördinaten worden rondom hun echte locatie getoond. Klik op een punt om de fossielen van die plek te bekijken. Gebruik de zoekbalk om plaatsen of fossielen te vinden.</p></div></div></div>
 
-<script>window.L_DISABLE_3D = true;</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="if(this.dataset.fallback==='1'){this.dataset.fallback='2';this.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';}else{this.dataset.fallback='1';this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
 <script>
@@ -382,6 +374,7 @@
   let hasAutoLoadedMap = false;
   let mapCache = [];
   let mapSearchMatchedKeys = null;
+  let mapCollectionSearchResults = [];
   let mapPlaceSearchResults = [];
   let mapSearchSequence = 0;
   let lastNominatimRequestAt = 0;
@@ -576,13 +569,6 @@
     }
     return candidates;
   }
-  function boundsContainCoordinate(bounds,lat,lng) {
-    const normalized=normalizeLongitude(lng);
-    const inLongitude=bounds.west<=bounds.east
-      ? (normalized>=bounds.west && normalized<=bounds.east) || (bounds.east>=180 && normalized===-180)
-      : normalized>=bounds.west || normalized<=bounds.east;
-    return lat>=bounds.south && lat<=bounds.north && inLongitude;
-  }
   function setLoadedRecords(incoming, note='') {
     records=incoming;
     buildOccurrenceSpatialIndex(incoming);
@@ -599,6 +585,7 @@
   function collectionOccurrences(r){return num(val(r,'n_occs','noc','nocc','occurrences'))||0;}
   function currentMapCoordinateMode(){return mapMode==='gplates'?'gplates':(mapMode==='paleo'?'paleo':false);}
   function collectionAge(r){const a=num(val(r,'eag','early_age','max_ma')),b=num(val(r,'lag','late_age','min_ma'));return a!==null&&b!==null?(a+b)/2:(a??b);}
+  function collectionFormation(r){return first(val(r,'sfm','sgr','smb','formation','stratigraphic_formation'),'Formatie onbekend');}
   function buildCollectionApiUrl(filters,bounds,summaryLevel=null){
     const p=new URLSearchParams({vocab:'pbdb',show:summaryLevel?'time':'loc,time,strat,geo,lith,ref,entname,prot,paleoloc'});
     if(summaryLevel)p.set('level',String(summaryLevel));else p.set('limit','all');
@@ -877,7 +864,9 @@
     mapCanvas.style.top = '0';
     mapCanvas.style.pointerEvents = 'none';
     pane.appendChild(mapCanvas);
-    mapCanvasCtx = mapCanvas.getContext('2d', { alpha: true, desynchronized: true });
+    mapCanvasCtx = mapCanvas.getContext('2d', { alpha: true });
+    if (!mapCanvasCtx) { mapCanvas.remove(); mapCanvas = null; return; }
+    mapCanvasCtx.globalCompositeOperation = 'source-over';
 
     // Transparent semantic buttons sit above numbered canvas clusters.
     // They keep cluster clicks reliable and accessible without blocking map
@@ -1307,25 +1296,28 @@
     };
 
     mapTileLayer = L.tileLayer(source.url,{
-      minZoom:0,maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:1,
+      minZoom:0,maxZoom:18,updateWhenIdle:false,updateWhenZooming:true,keepBuffer:2,
       attribution:source.attribution
     });
     mapTileLayer.on('tileload',() => {
       if (provider !== mapTileProvider) return;
       mapTileLoads++;
-      if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
       if (mapTileLoads === 1) {
+        setMapAreaStatus('Kaarttegels ontvangen via ' + source.label + ' · achtergrond wordt opgebouwd…');
+      }
+      if (mapTileLoads >= 3) {
+        if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
         setMapAreaStatus('Kaartachtergrond geladen via ' + source.label + ' · PBDB-vindplaatsen worden apart opgehaald');
       }
     });
     mapTileLayer.on('tileerror',() => {
       if (provider !== mapTileProvider) return;
       mapTileErrors++;
-      if (mapTileErrors >= 5 && mapTileLoads < 2) fallback();
+      if (mapTileErrors >= 5 && mapTileErrors > mapTileLoads * 2) fallback();
     });
     mapTileLayer.addTo(map);
     mapTileFallbackTimer = setTimeout(() => {
-      if (provider === mapTileProvider && mapTileLoads === 0) fallback();
+      if (provider === mapTileProvider && mapTileLoads < 3) fallback();
     },source.timeout);
   }
   function renderMap() {
