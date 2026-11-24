@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
+  <link rel="stylesheet" href="vendor/leaflet.css">
   <style>
     :root {
       --bg: #f4f6f8; --surface: #fff; --surface-2: #f8fafb; --ink: #142235;
@@ -334,7 +334,7 @@
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Details van de vondst</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
 <div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt deze website</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek een soort of groep</strong><p>Vul bijvoorbeeld Tyrannosaurus of Trilobita in. De zoekopdracht neemt ook de groepen daaronder mee.</p></div><div class="help-card"><strong>⏳ Kies een tijd</strong><p>Kies een tijdvak of vul in hoeveel miljoen jaar geleden je wilt zoeken.</p></div><div class="help-card"><strong>🌍 Bekijk de kaart</strong><p>De kaart opent in Noord-Holland. Als je verschuift of inzoomt, worden de vindplaatsen in dat gebied opgehaald. Vanaf zoomniveau 10 zie je elke vindplaats apart. Vindplaatsen op bijna dezelfde plek worden uit elkaar gezet met een lijntje naar hun echte locatie.</p></div></div><p class="footer-note">Op de kaart worden plekken die dicht bij elkaar liggen samengevoegd. Klik op een groep om verder in te zoomen. Vanaf zoomniveau 10 zie je losse punten. Plekken met dezelfde coördinaten worden rondom hun echte locatie getoond. Klik op een punt om de fossielen van die plek te bekijken. Gebruik de zoekbalk om plaatsen of fossielen te vinden.</p></div></div></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="if(this.dataset.fallback==='1'){this.dataset.fallback='2';this.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';}else{this.dataset.fallback='1';this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
 <script>
 (() => {
@@ -1253,35 +1253,69 @@
   function installBaseMapTiles(provider) {
     if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
     if (mapTileLayer && map && map.hasLayer(mapTileLayer)) map.removeLayer(mapTileLayer);
-    mapTileProvider = provider; mapTileLoads = 0; mapTileErrors = 0;
-    const isCarto = provider === 'carto';
-    const url = isCarto ? 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-    const attribution = isCarto
-      ? '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
-      : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
-    mapTileLayer = L.tileLayer(url,{minZoom:0,maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:1,attribution:attribution});
+
+    const sources = {
+      osm: {
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>',
+        timeout: 4500,
+        label: 'OpenStreetMap'
+      },
+      carto: {
+        url: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+        timeout: 6500,
+        label: 'CARTO'
+      },
+      esri: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles &copy; Esri — Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom and the GIS User Community',
+        timeout: 8000,
+        label: 'Esri'
+      }
+    };
+    const order = ['osm','carto','esri'];
+    const source = sources[provider];
+    if (!source) return;
+
+    mapTileProvider = provider;
+    mapTileLoads = 0;
+    mapTileErrors = 0;
+
+    const fallback = () => {
+      if (provider !== mapTileProvider) return;
+      const next = order[order.indexOf(provider) + 1];
+      if (next) {
+        setMapAreaStatus(source.label + ' reageert niet · andere kaartbron proberen…');
+        installBaseMapTiles(next);
+      } else {
+        setStatus('Kaartachtergrond niet bereikbaar',false);
+        setMapAreaStatus('Geen van de drie kaartbronnen kon kaarttegels laden');
+        notice('De kaartachtergrond is niet bereikbaar via OpenStreetMap, CARTO of Esri. De vindplaatsgegevens kunnen nog steeds beschikbaar zijn.','error');
+      }
+    };
+
+    mapTileLayer = L.tileLayer(source.url,{
+      minZoom:0,maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:1,
+      attribution:source.attribution
+    });
     mapTileLayer.on('tileload',() => {
       if (provider !== mapTileProvider) return;
       mapTileLoads++;
       if (mapTileFallbackTimer) { clearTimeout(mapTileFallbackTimer); mapTileFallbackTimer = null; }
-      if (mapTileLoads === 1) setMapAreaStatus(isCarto ? 'Kaartachtergrond geladen via alternatieve bron' : 'Achtergrondkaart geladen · PBDB-vindplaatsen worden apart opgehaald');
+      if (mapTileLoads === 1) {
+        setMapAreaStatus('Kaartachtergrond geladen via ' + source.label + ' · PBDB-vindplaatsen worden apart opgehaald');
+      }
     });
     mapTileLayer.on('tileerror',() => {
       if (provider !== mapTileProvider) return;
       mapTileErrors++;
-      if (!isCarto && mapTileErrors >= 5 && mapTileLoads < 2) installBaseMapTiles('carto');
-      else if (isCarto && mapTileErrors >= 5 && mapTileLoads === 0) {
-        setStatus('Kaartachtergrond niet bereikbaar',false);
-        setMapAreaStatus('Kaarttegels van beide kaartbronnen konden niet worden geladen');
-        notice('De kaartachtergrond is niet bereikbaar. De PBDB-gegevens kunnen nog wel laden. Controleer of je netwerk kaartbronnen blokkeert.','error');
-      }
+      if (mapTileErrors >= 5 && mapTileLoads < 2) fallback();
     });
     mapTileLayer.addTo(map);
     mapTileFallbackTimer = setTimeout(() => {
-      if (provider !== mapTileProvider || mapTileLoads > 0) return;
-      if (!isCarto) installBaseMapTiles('carto');
-      else { setStatus('Kaartachtergrond niet bereikbaar',false); setMapAreaStatus('De kaarttegels reageren niet · controleer de verbinding'); notice('De kaartachtergrond reageert niet. Probeer de pagina opnieuw of controleer je verbinding.','error'); }
-    },isCarto ? 7000 : 4200);
+      if (provider === mapTileProvider && mapTileLoads === 0) fallback();
+    },source.timeout);
   }
   function renderMap() {
     if (!window.L) {
