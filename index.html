@@ -1489,13 +1489,13 @@
   }
   async function searchExactPbdbId(query){
     const value=query.trim();
-    if(/^col:\\d+$/i.test(value)||/^\\d+$/.test(value)){
+    if(/^col:\d+$/i.test(value)||/^\d+$/.test(value)){
       const id=value.replace(/^col:/i,'');
       const params=new URLSearchParams({id:'col:'+id,show:'loc,time,strat,geo,lith,ref,entname,prot',vocab:'pbdb'});
       const response=await fetch(API+'/colls/single.json?'+params.toString(),{headers:{'Accept':'application/json'}});
       if(response.ok){const json=await response.json();return {collections:Array.isArray(json.records)?json.records.filter(item=>collectionLat(item)!==null&&collectionLng(item)!==null):[],occurrences:[]};}
     }
-    if(/^occ:\\d+$/i.test(value)){
+    if(/^occ:\d+$/i.test(value)){
       const params=new URLSearchParams({id:value,show:'loc,time,phylo,ident',vocab:'pbdb'});
       const response=await fetch(API+'/occs/single.json?'+params.toString(),{headers:{'Accept':'application/json'}});
       if(response.ok){const json=await response.json();return {collections:[],occurrences:Array.isArray(json.records)?json.records:[]};}
