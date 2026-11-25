@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101b2a" />
-  <meta name="paleodb-build" content="2026-11-24-full-map-audit-fix" />
+  <meta name="paleodb-build" content="2026-11-25-full-time-search-ui" />
   <meta name="description" content="Een overzichtelijke explorer voor fossielvondsten en paleobiologische gegevens uit de Paleobiology Database." />
   <title>PaleoDB Explorer · snelle kaartweergave</title>
   <!-- Build: 2026-11-20-performance-v6 -->
@@ -173,6 +173,23 @@
     .map-search-result strong { display:block; font-size:11px; line-height:1.35; }
     .map-search-result span { display:block; color:#8693a2; font-size:9px; line-height:1.4; margin-top:3px; }
     .map-search-empty { color:#8996a5; font-size:10px; padding:4px 1px; }
+    .period-strip-heading { display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 7px;color:#65758a;font-size:11px; }
+    .period-strip-heading strong { color:#33465a;font:700 12px 'Manrope',sans-serif; }
+    .period-strip-heading span { color:#8995a2;font-size:10px; }
+    .period-strip-heading button { margin-left:auto; }
+    .time-scale-intro { color:#718094;font-size:12px;line-height:1.5;margin:0 0 12px; }
+    .time-scale-controls { display:grid;grid-template-columns:minmax(220px,1fr) minmax(160px,220px);gap:9px;margin-bottom:8px; }
+    .time-scale-controls input,.time-scale-controls select { min-width:0;height:41px;border:1px solid #dfe7eb;border-radius:9px;background:#fff;color:#26394d;padding:0 12px;font-size:12px; }
+    .time-scale-controls input:focus,.time-scale-controls select:focus { outline:3px solid #65bfb433;border-color:#74c5bc; }
+    .time-scale-count { color:#718094;font-size:10px;margin:5px 1px 9px; }
+    .time-scale-list { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:470px;overflow:auto;padding:2px 3px 8px; }
+    .time-scale-item { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;border:1px solid #e7edf0;border-radius:9px;background:#fff;padding:9px 11px;color:#35485d;min-width:0; }
+    .time-scale-item:hover { border-color:#8bcfc5;background:#f7fcfb; }
+    .time-scale-item strong { display:block;font-size:11px;overflow-wrap:anywhere; }
+    .time-scale-item small { display:block;color:#8996a5;font-size:9px;margin-top:3px; }
+    .time-scale-item .time-rank { white-space:nowrap;color:#258579;background:#eef8f5;border-radius:6px;padding:4px 6px;font-size:9px;font-weight:700; }
+    .time-scale-empty { grid-column:1/-1;padding:18px;border:1px dashed #dce5e9;border-radius:9px;color:#8995a2;font-size:11px;text-align:center; }
+    @media (max-width:800px) { .time-scale-list{grid-template-columns:1fr}.time-scale-controls{grid-template-columns:1fr;} }
     .map-search-status { color:#718094; font-size:10px; margin-top:8px; }
     .map-legend a { color:#687d91; text-decoration:none; }
     .map-legend a:hover { text-decoration:underline; }
@@ -243,21 +260,21 @@
     <div class="content">
       <div class="page-head">
         <div><h1 id="pageTitle">Ontdek de geschiedenis van het leven.</h1><p class="subtitle" id="pageSubtitle">Doorzoek fossielvondsten, verken vindplaatsen en ontdek patronen door de geologische tijd.</p></div>
-        <div class="head-actions"><button class="btn primary" id="runSearchTop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>Zoek gegevens</button></div>
+        <div class="head-actions"><button class="btn primary" id="runSearchTop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>Zoek fossielen</button></div>
       </div>
 
       <section class="filters" aria-label="Zoekfilters">
-        <div class="filters-top"><div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M7 12h10m-7 7h4"/><circle cx="8" cy="5" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/></svg>Zoek en filter</div><span class="filter-hint">Combineer filters om gerichter te zoeken</span></div>
+        <div class="filters-top"><div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M7 12h10m-7 7h4"/><circle cx="8" cy="5" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/></svg>Zoekfilters</div><span class="filter-hint">Vul alleen in wat je weet. Lege velden worden overgeslagen.</span></div>
         <div class="filters-grid">
-          <div class="field"><label for="soortgroepInput">Soort of diergroep</label><input id="soortgroepInput" type="text" placeholder="Bijv. Tyrannosaurus, Trilobita..."></div>
-          <div class="field"><label for="intervalInput">Tijdvak</label><input id="intervalInput" type="text" list="intervalList" placeholder="Bijv. Cretaceous"><datalist id="intervalList"><option>Cambrian</option><option>Ordovician</option><option>Silurian</option><option>Devonian</option><option>Carboniferous</option><option>Permian</option><option>Triassic</option><option>Jurassic</option><option>Cretaceous</option><option>Paleocene</option><option>Eocene</option><option>Oligocene</option><option>Miocene</option><option>Pliocene</option><option>Pleistocene</option></datalist></div>
-          <div class="field"><label for="regionInput">Land / werelddeel</label><select id="regionInput"><option value="">Overal ter wereld</option><option value="EUR">Europa</option><option value="NAM">Noord-Amerika</option><option value="SAM">Zuid-Amerika</option><option value="AFR">Afrika</option><option value="ASI">Azië</option><option value="OCE">Oceanië</option><option value="ANT">Antarctica</option><option value="NL">Nederland</option><option value="BE">België</option><option value="DE">Duitsland</option><option value="GB">Verenigd Koninkrijk</option><option value="US">Verenigde Staten</option><option value="CN">China</option></select></div>
-          <div class="field"><label for="oldestInput">Ouder dan (miljoen jaar)</label><input id="oldestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 145"></div>
-          <div class="field"><label for="youngestInput">Jonger dan (miljoen jaar)</label><input id="youngestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 66"></div>
+          <div class="field"><label for="soortgroepInput">Fossielnaam of diergroep</label><input id="soortgroepInput" type="text" placeholder="Bijv. Tyrannosaurus, Trilobita..."></div>
+          <div class="field"><label for="intervalInput">Geologisch tijdvak</label><input id="intervalInput" type="text" list="intervalList" placeholder="Bijv. Cretaceous of Maastrichtian"><datalist id="intervalList"></datalist></div>
+          <div class="field"><label for="regionInput">Land of werelddeel</label><select id="regionInput"><option value="">Overal ter wereld</option><option value="EUR">Europa</option><option value="NAM">Noord-Amerika</option><option value="SAM">Zuid-Amerika</option><option value="AFR">Afrika</option><option value="ASI">Azië</option><option value="OCE">Oceanië</option><option value="ANT">Antarctica</option><option value="NL">Nederland</option><option value="BE">België</option><option value="DE">Duitsland</option><option value="GB">Verenigd Koninkrijk</option><option value="US">Verenigde Staten</option><option value="CN">China</option></select></div>
+          <div class="field"><label for="oldestInput">Ouder dan (Ma)</label><input id="oldestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 145"></div>
+          <div class="field"><label for="youngestInput">Jonger dan (Ma)</label><input id="youngestInput" type="number" min="0" max="4600" step="0.1" placeholder="Bijv. 66"></div>
           <div class="field"><label for="stratigraphyInput">Gesteentelaag / formatie</label><input id="stratigraphyInput" type="text" placeholder="Bijv. Hell Creek"></div>
-          <div class="field"><label for="authorizerInput">ID van goedkeurder</label><input id="authorizerInput" type="number" min="1" step="1" placeholder="Persoonsnummer in de fossielendatabase"></div>
-          <div class="field"><label for="refAuthorInput">Naam van de onderzoeker</label><input id="refAuthorInput" type="text" placeholder="Bijv. Smith"></div>
-          <div class="field"><label for="researchGroupInput">Onderzoeksgroep</label><input id="researchGroupInput" type="text" placeholder="Naam van een onderzoeksgroep"></div>
+          <div class="field"><label for="authorizerInput">PBDB-ID van goedkeurder</label><input id="authorizerInput" type="number" min="1" step="1" placeholder="Persoonsnummer in de fossielendatabase"></div>
+          <div class="field"><label for="refAuthorInput">Onderzoeker of auteur</label><input id="refAuthorInput" type="text" placeholder="Bijv. Smith"></div>
+          <div class="field"><label for="researchGroupInput">Naam onderzoeksgroep</label><input id="researchGroupInput" type="text" placeholder="Naam van een onderzoeksgroep"></div>
         </div>
         <div class="filter-footer"><div class="filter-hint">Zoeken gebruikt alleen het zichtbare kaartgebied. Verschuif of zoom de kaart om een ander gebied te bekijken.</div><div class="filter-buttons"><button class="btn small" id="resetFilters">Wis filters</button><button class="btn primary small" id="runSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>Toon resultaten</button></div></div>
       </section>
@@ -293,17 +310,17 @@
       </section>
 
       <section class="view active" id="view-map">
-        <div class="panel map-panel"><div class="panel-head"><div><h2>Vindplaatsen op de kaart</h2><p>Start in Noord-Holland · toont plekken in het zichtbare gebied</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn">Locaties van nu</button><button id="paleoMapBtn">PBDB-paleocoördinaten</button><button id="gplatesMapBtn">GPlates-reconstructie</button></div></div></div>
+        <div class="panel map-panel"><div class="panel-head"><div><h2>Fossielvindplaatsen</h2><p>Zoek een soort of plaats. De kaart laat zien waar fossielen zijn gevonden.</p></div><div class="map-toolbar"><span class="tag map-limit-tag">Verder uitzoomen kan niet</span><div class="segmented"><button class="active" id="modernMapBtn">Locaties van nu</button><button id="paleoMapBtn">PBDB-paleocoördinaten</button><button id="gplatesMapBtn">GPlates-reconstructie</button></div></div></div>
           <div class="map-search-wrap">
             <div class="map-search-form" role="search">
-              <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een plaats, fossiel, gesteentelaag of nummer…" autocomplete="off" spellcheck="false" aria-label="Zoek plaats of fossiel"></div>
+              <div class="map-search-input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="mapSearchInput" type="search" placeholder="Zoek een dinosaurus, fossiel, plaats of PBDB-nummer…" autocomplete="off" spellcheck="false" aria-label="Zoek dinosaurus, fossiel, plaats of PBDB-nummer"></div>
               <button class="btn primary" id="mapSearchButton" type="button">Zoeken</button>
               <button class="btn" id="mapSearchClear" type="button">Wissen</button><button class="btn" id="toggleFiltersButton" type="button" aria-expanded="false">Filters</button>
             </div>
-            <div class="map-search-help">Zoekt plaatsen en fossielen in de fossielendatabase. Typ een woord en druk op Enter of klik op Zoeken.</div>
+            <div class="map-search-help">Zoek op een soortgroep, fossielnaam, plaats of vindplaatsnummer. Klik op een resultaat om het op de kaart te bekijken. Je kunt ook zoeken naar een geologische formatie.</div>
           </div>
           <div class="map-search-results" id="mapSearchResults" hidden aria-live="polite"></div>
-          <div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Tijdlijn wordt geladen…</span></div>
+          <div class="period-strip-heading"><strong>Snelle tijdkeuze</strong><span>Kies een eon, era of periode</span><button class="btn small" id="openAllTimeIntervals" type="button">Alle tijdvakken zoeken</button></div><div class="period-strip" id="mapPeriodStrip" aria-label="Snelle selectie geologische tijd"><span class="feature-muted">Tijdschaal laden…</span></div>
           <div class="map-extra-controls">
             <div class="map-saved-controls"><strong>Bewaarde kaartgebieden</strong><select id="savedMapViews" aria-label="Opgeslagen kaartgebieden"><option value="">Kies een kaartgebied…</option></select><button class="btn small" id="saveMapViewButton" type="button">Bewaar deze kaart</button><button class="btn small" id="deleteMapViewButton" type="button">Verwijder</button></div>
             <div class="map-gplates-controls"><strong>Waar lagen vindplaatsen vroeger?</strong><label for="gplatesAgeInput">Hoeveel miljoen jaar geleden?</label><input id="gplatesAgeInput" type="number" min="0" max="410" step="1" value="100"><span class="feature-muted">Ma betekent miljoen jaar geleden.</span><label for="gplatesRekenmodel">Rekenmodel</label><select id="gplatesRekenmodel"><option value="ZAHIROVIC2022">Zahirovic 2022 (0–410 Ma)</option><option value="MULLER2022">Müller 2022 (0–1000 Ma)</option><option value="MERDITH2021">Merdith 2021 (0–1000 Ma)</option><option value="PALEOMAP">PALEOMAP (0–1100 Ma)</option><option value="CAO2024">Cao 2024 (0–1800 Ma)</option><option value="MULLER2019">Müller 2019 (0–250 Ma)</option></select><button class="btn small primary" id="runGplatesButton" type="button">Toon oude ligging</button><button class="btn small" id="resetGplatesButton" type="button">Toon huidige ligging</button><span id="gplatesStatus" class="feature-muted">Alleen de vindplaatsen krijgen een oude plek. De achtergrondkaart blijft de kaart van nu.</span></div>
@@ -312,7 +329,7 @@
       </section>
 
       <section class="view" id="view-timeline">
-        <div class="panel"><div class="panel-head"><div><h2>Tijdlijn</h2><p>Hoe zijn fossielen verdeeld over miljoenen jaren?</p></div><span class="tag">MA = MILJOEN JAAR GELEDEN</span></div><div class="panel-body"><div id="timeScaleBrowser" class="period-strip" style="margin:-6px -5px 16px;border:1px solid #edf0f3;border-radius:10px"><span class="feature-muted">Tijdschaal laden…</span></div><p class="timeline-note">De grafiek gebruikt de leeftijden die bij de fossielen bekend zijn. De oudste vondsten staan links.</p><div style="height:390px;position:relative"><canvas id="timelineChart"></canvas><div class="empty" id="timelineEmpty"><strong>De tijdlijn is nog leeg</strong><span>Voer een zoekopdracht uit om de tijdlijn te vullen.</span></div></div></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Geologische tijdlijn</h2><p>Zoek een tijdvak of kies een niveau in de volledige internationale tijdschaal.</p></div><span class="tag">MA = MILJOEN JAAR GELEDEN</span></div><div class="panel-body"><div class="time-scale-intro">De oudste tijdvakken staan bovenaan. Je kunt zoeken op naam of filteren op eon, era, periode, epoch of etage.</div><div class="time-scale-controls"><input id="timeScaleSearchInput" type="search" placeholder="Zoek tijdvak, bijvoorbeeld Maastrichtian…" aria-label="Zoek geologisch tijdvak"><select id="timeScaleRank" aria-label="Filter op niveau"><option value="">Alle niveaus</option><option value="eon">Eonen</option><option value="era">Era’s</option><option value="period">Perioden</option><option value="epoch">Epochs</option><option value="age">Etages</option><option value="other">Overige tijdvakken</option></select></div><div id="timeScaleCount" class="time-scale-count" role="status">Tijdschaal ophalen…</div><div id="timeScaleBrowser" class="time-scale-list"><span class="feature-muted">Tijdschaal laden…</span></div><p class="timeline-note">Kies een tijdvak om de kaart op die periode te filteren. Ma betekent miljoen jaar geleden.</p><div style="height:390px;position:relative"><canvas id="timelineChart"></canvas><div class="empty" id="timelineEmpty"><strong>De tijdlijn is nog leeg</strong><span>Voer een zoekopdracht uit om de tijdlijn te vullen.</span></div></div></div></div>
       </section>
 
        <section class="view" id="view-soortgroepen">
@@ -335,7 +352,7 @@
 </div>
 
 <div class="modal-backdrop" id="detailModal"><div class="modal"><div class="modal-head"><div><h3 id="detailTitle">Details van de vondst</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px" id="detailSubtitle"></div></div><button class="icon-btn" id="closeDetail" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="detail-grid" id="detailGrid"></div></div></div></div>
-<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt deze website</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>🔎 Zoek een soort of groep</strong><p>Vul bijvoorbeeld Tyrannosaurus of Trilobita in. De zoekopdracht neemt ook de groepen daaronder mee.</p></div><div class="help-card"><strong>⏳ Kies een tijd</strong><p>Kies een tijdvak of vul in hoeveel miljoen jaar geleden je wilt zoeken.</p></div><div class="help-card"><strong>🌍 Bekijk de kaart</strong><p>De kaart opent in Noord-Holland. Als je verschuift of inzoomt, worden de vindplaatsen in dat gebied opgehaald. Vanaf zoomniveau 10 zie je elke vindplaats apart. Vindplaatsen op bijna dezelfde plek worden uit elkaar gezet met een lijntje naar hun echte locatie.</p></div></div><p class="footer-note">Op de kaart worden plekken die dicht bij elkaar liggen samengevoegd. Klik op een groep om verder in te zoomen. Vanaf zoomniveau 10 zie je losse punten. Plekken met dezelfde coördinaten worden rondom hun echte locatie getoond. Klik op een punt om de fossielen van die plek te bekijken. Gebruik de zoekbalk om plaatsen of fossielen te vinden.</p></div></div></div>
+<div class="modal-backdrop" id="helpModal"><div class="modal"><div class="modal-head"><div><h3>Zo werkt deze website</h3><div style="font-size:10px;color:#8b98a6;margin-top:4px">Een korte uitleg</div></div><button class="icon-btn" id="closeHelp" aria-label="Sluiten">✕</button></div><div class="modal-body"><div class="help-grid"><div class="help-card"><strong>1. Zoek</strong><p>Typ een dinosaurus, diergroep, fossielnaam, plaats of PBDB-nummer in de zoekbalk.</p></div><div class="help-card"><strong>2. Kies een resultaat</strong><p>Je ziet aparte resultaten voor plaatsen, soorten en vindplaatsen. Klik op een resultaat om ernaartoe te gaan.</p></div><div class="help-card"><strong>3. Filter op tijd</strong><p>Kies een geologisch tijdvak bij de snelle tijdkeuze of open ‘Alle tijdvakken zoeken’ voor de volledige lijst.</p></div></div><p class="footer-note">Op de kaart kunnen dicht bij elkaar liggende vindplaatsen worden samengevoegd tot een groep. Klik op een groep om verder in te zoomen. Vanaf zoomniveau 10 zie je losse vindplaatsen. Gebruik ‘Filters’ alleen wanneer je extra voorwaarden wilt instellen.</p></div></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" onerror="if(this.dataset.fallback==='1'){this.dataset.fallback='2';this.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';}else{this.dataset.fallback='1';this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.8/dist/chart.umd.min.js'"></script>
