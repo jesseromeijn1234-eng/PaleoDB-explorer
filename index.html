@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101b2a" />
-  <meta name="paleodb-build" content="2026-11-25-dutch-search-tabs-fix" />
+  <meta name="paleodb-build" content="2026-11-25-dutch-search-and-navigation-fixes" />
   <meta name="description" content="Een overzichtelijke explorer voor fossielvondsten en paleobiologische gegevens uit de Paleobiology Database." />
   <title>PaleoDB Explorer · snelle kaartweergave</title>
   <!-- Build: 2026-11-20-performance-v6 -->
@@ -474,7 +474,7 @@
   function intervalDisplayName(name){
     const raw=String(name||'').trim();
     if(DUTCH_INTERVAL_NAMES[raw])return DUTCH_INTERVAL_NAMES[raw];
-    const match=raw.match(/^(Early|Lower|Middle|Late|Upper)\\s+(.+)$/i);
+    const match=raw.match(/^(Early|Lower|Middle|Late|Upper)\s+(.+)$/i);
     if(match&&DUTCH_INTERVAL_NAMES[match[2]])return DUTCH_TIME_PREFIX[match[1][0].toUpperCase()+match[1].slice(1).toLowerCase()]+' '+DUTCH_INTERVAL_NAMES[match[2]];
     return raw;
   }
@@ -482,7 +482,7 @@
     const raw=String(name||'').trim();
     const exact=Object.entries(DUTCH_INTERVAL_NAMES).find(([english,dutch])=>normalizeSearchText(dutch)===normalizeSearchText(raw));
     if(exact)return exact[0];
-    const match=raw.match(/^(Vroeg|Midden|Laat)\\s+(.+)$/i);
+    const match=raw.match(/^(Vroeg|Midden|Laat)\s+(.+)$/i);
     if(match){
       const base=Object.entries(DUTCH_INTERVAL_NAMES).find(([english,dutch])=>normalizeSearchText(dutch)===normalizeSearchText(match[2]));
       if(base)return ENGLISH_TIME_PREFIX[match[1][0].toUpperCase()+match[1].slice(1).toLowerCase()]+' '+base[0];
@@ -742,9 +742,26 @@
       notice('Nieuwe gebieden worden opgehaald op basis van moderne kaartcoördinaten. De kaart is daarom teruggezet naar moderne coördinaten.');
     }
     hasActiveQuery=true;
+    const recordsViewActive=$('view-records').classList.contains('active');
+    if(!recordsViewActive){
+      records=[];
+      filteredRecords=[];
+      currentPage=1;
+    }
+    setMapCollections([],null);
     const collectionPromise=loadViewportCollections({useCache:false});
-    if($('view-records').classList.contains('active'))return Promise.all([collectionPromise,loadViewportRecords({reason:'search',useCache:false})]);
-    return collectionPromise;
+    if(recordsViewActive)return Promise.all([collectionPromise,loadViewportRecords({reason:'search',useCache:false})]);
+    return collectionPromise.then(()=>{
+      if($('view-overview').classList.contains('active')){
+        summaryStats();
+        renderCharts();
+        renderRecent();
+      }else if($('view-timeline').classList.contains('active')){
+        renderCharts();
+      }else{
+        summaryStats();
+      }
+    });
   }
   async function loadViewportRecords({ reason='map', useCache=true } = {}) {
     const filters=currentFilters();
@@ -842,7 +859,16 @@
     if(!hasActiveQuery || !map || mapMode!=='modern') return;
     clearTimeout(mapMoveTimer);
     setMapAreaStatus('Kaart verplaatst · nieuw zichtbaar gebied wordt opgehaald…');
-    mapMoveTimer=setTimeout(()=>{loadViewportCollections({useCache:true});if($('view-records').classList.contains('active'))loadViewportRecords({reason:'map'});},160);
+    mapMoveTimer=setTimeout(async()=>{
+      const recordsViewActive=$('view-records').classList.contains('active');
+      if(!recordsViewActive){records=[];filteredRecords=[];currentPage=1;}
+      await loadViewportCollections({useCache:true});
+      if(recordsViewActive)await loadViewportRecords({reason:'map'});
+      else if($('view-overview').classList.contains('active')){
+        summaryStats();renderCharts();renderRecent();
+      }else if($('view-timeline').classList.contains('active'))renderCharts();
+      else summaryStats();
+    },160);
   }
   function uniqueCount(arr, fn) { const s=new Set(); arr.forEach(r=>{const v=fn(r);if(v!==''&&v!==null&&v!==undefined)s.add(String(v));}); return s.size; }
   function summaryStats() {
@@ -874,10 +900,12 @@
     const useCollections=!filteredRecords.length&&mapCollections.length>0;
     const h=makeHistogram(useCollections?mapCollections:filteredRecords,12,useCollections);
     $('overviewChartEmpty').style.display=h.labels.length?'none':'block';
+    if(!h.labels.length&&overviewChart){overviewChart.destroy();overviewChart=null;}
     if(window.Chart && h.labels.length){ const ctx=$('overviewChart').getContext('2d'); if(overviewChart)overviewChart.destroy(); overviewChart=new Chart(ctx,{type:'bar',data:{labels:h.labels,datasets:[{data:h.counts,backgroundColor:'#55b8aa',hoverBackgroundColor:'#208f84',borderRadius:5,maxBarThickness:27}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} vondsten`}}},scales:{x:{grid:{display:false},ticks:{color:'#8995a4',font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:6}},y:{beginAtZero:true,grid:{color:'#eef1f3'},ticks:{color:'#8995a4',font:{size:9},precision:0}}}}}); }
     const tops=useCollections?[]:topTaxa(); const max=tops[0]?.[1]||1;
     $('topTaxa').innerHTML=tops.length?tops.map(([name,count],i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div style="min-width:0"><div class="rank-name" title="${esc(name)}">${esc(name)}</div><div class="rank-bar"><span style="width:${Math.max(4,count/max*100)}%"></span></div></div><div class="rank-count">${fmt(count)}</div></div>`).join(''):(useCollections?'<div class="empty"><strong>Soortgroepen nog niet opgehaald</strong><span>Open een vindplaats om de bijbehorende fossielsoortgroepen te bekijken.</span></div>':'<div class="empty"><strong>Geen soortgroepen om te tonen</strong><span>Zoek eerst naar fossielen.</span></div>');
     $('timelineEmpty').style.display=h.labels.length?'none':'block';
+    if(!h.labels.length&&timelineChart){timelineChart.destroy();timelineChart=null;}
     if(window.Chart && h.labels.length){ const ctx=$('timelineChart').getContext('2d'); if(timelineChart)timelineChart.destroy(); timelineChart=new Chart(ctx,{type:'bar',data:{labels:h.labels,datasets:[{label:'Fossielen',data:h.counts,backgroundColor:'#6bbeb3',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} vondsten`}}},scales:{x:{grid:{display:false},ticks:{color:'#8391a0',font:{size:10},maxRotation:0,autoSkip:true}},y:{beginAtZero:true,grid:{color:'#edf1f3'},ticks:{color:'#8391a0',precision:0}}}}}); }
   }
   function recordRows(arr) {
@@ -1903,7 +1931,7 @@
     } else if (name==='overview') {
       summaryStats(); renderCharts(); renderRecent();
     } else if (name==='records') {
-      if(records.length)renderRecordTable();else loadViewportRecords({reason:'records',useCache:true});
+      loadViewportRecords({reason:'records',useCache:true});
     } else if (name==='timeline') {
       renderCharts();
     } else if (name==='soortgroepen') {
