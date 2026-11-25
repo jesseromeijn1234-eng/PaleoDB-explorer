@@ -450,12 +450,55 @@
   const getYoung = r => num(val(r,'min_ma','younger_age','late_age','lag','min_age'));
   const getLat = (r, paleo=false) => num(paleo ? val(r,'paleolat','pla','paleo_lat','paleolatitude','paleolatitude_deg') : val(r,'lat','latitude'));
   const getLng = (r, paleo=false) => num(paleo ? val(r,'paleolng','plo','paleo_lng','paleolong','paleolongitude','paleolongitude_deg') : val(r,'lng','longitude','lon'));
-  const getInterval = r => { const e=val(r,'early_interval','early_interval_name'); const l=val(r,'late_interval','late_interval_name'); return e&&l&&e!==l?`${e} – ${l}`:first(e,l,val(r,'interval','geological_interval'),'—'); };
+  const getInterval = r => { const e=intervalDisplayName(val(r,'early_interval','early_interval_name')); const l=intervalDisplayName(val(r,'late_interval','late_interval_name')); return e&&l&&e!==l?`${e} – ${l}`:first(e,l,intervalDisplayName(val(r,'interval','geological_interval')),'—'); };
   const getPlace = r => first(val(r,'formation','stratigraphic_formation','state','province','country','continent'),'—');
   const numFormat = v => v===null || v===undefined ? '—' : Number(v).toLocaleString('nl-NL',{maximumFractionDigits:1});
 
   function currentFilters() { return {soortgroep:$('soortgroepInput').value.trim(), interval:$('intervalInput').value.trim(), region:$('regionInput').value, oldest:$('oldestInput').value.trim(), youngest:$('youngestInput').value.trim(), stratigraphy:$('stratigraphyInput').value.trim(), authorizer:$('authorizerInput').value.trim(), refAuthor:$('refAuthorInput').value.trim(), researchGroup:$('researchGroupInput').value.trim()}; }
-  function intervalIdForName(name){const target=normalizeSearchText(name);const row=timeScaleRecords.find(item=>normalizeSearchText(first(val(item,'nam','name'),''))===target);return row?String(val(row,'oid')).replace(/^int:/,''):'';}
+  const DUTCH_INTERVAL_NAMES={
+    Cambrian:'Cambrium',Ordovician:'Ordovicium',Silurian:'Siluur',Devonian:'Devoon',
+    Carboniferous:'Carboon',Permian:'Perm',Triassic:'Trias',Jurassic:'Jura',Cretaceous:'Krijt',
+    Paleogene:'Paleogeen',Neogene:'Neogeen',Quaternary:'Kwartair',Precambrian:'Precambrium',
+    Paleozoic:'Paleozoïcum',Mesozoic:'Mesozoïcum',Cenozoic:'Kenozoïcum',
+    Paleocene:'Paleoceen',Eocene:'Eoceen',Oligocene:'Oligoceen',Miocene:'Mioceen',
+    Pliocene:'Plioceen',Pleistocene:'Pleistoceen',Holocene:'Holoceen',
+    Berriasian:'Berriasien',Valanginian:'Valanginien',Hauterivian:'Hauterivien',Barremian:'Barremien',
+    Aptian:'Aptien',Albian:'Albien',Cenomanian:'Cenomanien',Turonian:'Turonien',Coniacian:'Coniacien',
+    Santonian:'Santonien',Campanian:'Campanien',Maastrichtian:'Maastrichtien',Danian:'Danien',
+    Hettangian:'Hettangien',Sinemurian:'Sinemurien',Pliensbachian:'Pliensbachien',Toarcian:'Toarcien',
+    Aalenian:'Aalenien',Bajocian:'Bajocien',Bathonian:'Bathonien',Callovian:'Callovien',
+    Oxfordian:'Oxfordien',Kimmeridgian:'Kimmeridgien',Tithonian:'Tithonien'
+  };
+  const DUTCH_TIME_PREFIX={Early:'Vroeg',Lower:'Vroeg',Middle:'Midden',Late:'Laat',Upper:'Laat'};
+  const ENGLISH_TIME_PREFIX={Vroeg:'Early',Midden:'Middle',Laat:'Late'};
+  function intervalDisplayName(name){
+    const raw=String(name||'').trim();
+    if(DUTCH_INTERVAL_NAMES[raw])return DUTCH_INTERVAL_NAMES[raw];
+    const match=raw.match(/^(Early|Lower|Middle|Late|Upper)\\s+(.+)$/i);
+    if(match&&DUTCH_INTERVAL_NAMES[match[2]])return DUTCH_TIME_PREFIX[match[1][0].toUpperCase()+match[1].slice(1).toLowerCase()]+' '+DUTCH_INTERVAL_NAMES[match[2]];
+    return raw;
+  }
+  function canonicalIntervalName(name){
+    const raw=String(name||'').trim();
+    const exact=Object.entries(DUTCH_INTERVAL_NAMES).find(([english,dutch])=>normalizeSearchText(dutch)===normalizeSearchText(raw));
+    if(exact)return exact[0];
+    const match=raw.match(/^(Vroeg|Midden|Laat)\\s+(.+)$/i);
+    if(match){
+      const base=Object.entries(DUTCH_INTERVAL_NAMES).find(([english,dutch])=>normalizeSearchText(dutch)===normalizeSearchText(match[2]));
+      if(base)return ENGLISH_TIME_PREFIX[match[1][0].toUpperCase()+match[1].slice(1).toLowerCase()]+' '+base[0];
+    }
+    return raw;
+  }
+  function intervalIdForName(name){
+    const target=normalizeSearchText(canonicalIntervalName(name));
+    const row=timeScaleRecords.find(item=>normalizeSearchText(first(val(item,'nam','name'),''))===target);
+    return row?String(val(row,'oid')).replace(/^int:/,''):'';
+  }
+  function rankDutchName(rank){
+    const key=String(rank||'').trim().toLowerCase();
+    const labels={kingdom:'Rijk',subkingdom:'Onderrijk',phylum:'Stam',subphylum:'Onderstam',class:'Klasse',subclass:'Onderklasse',order:'Orde',suborder:'Onderorde',infraorder:'Infraorde',superorder:'Superorde',family:'Familie',subfamily:'Onderfamilie',superfamily:'Superfamilie',tribe:'Tribus',subtribe:'Subtribus',genus:'Geslacht',subgenus:'Onderdeel van een geslacht',species:'Soort',subspecies:'Ondersoort',variety:'Variëteit',clade:'Clade'};
+    return labels[key]||String(rank||'Soortgroep');
+  }
   function buildApiUrl(f,bounds=null){
     const p=new URLSearchParams({vocab:'pbdb',limit:String(PBDB_REQUEST_LIMIT),show:SHOW});
     if(f.soortgroep)p.set('base_name',f.soortgroep);
@@ -951,7 +994,7 @@
   function collectionPopupNode(collection) {
     const node=document.createElement('div');node.className='collection-popup';
     const name=first(val(collection,'collection_name','nam','name'),'Naamloze vindplaats');
-    const interval=[val(collection,'early_interval','oei'),val(collection,'late_interval','oli')].filter(Boolean).join(' – ')||'Tijdvak onbekend';
+    const interval=[val(collection,'early_interval','oei'),val(collection,'late_interval','oli')].filter(Boolean).map(intervalDisplayName).join(' – ')||'Tijdvak onbekend';
     const age=collectionAge(collection),formation=first(val(collection,'sfm','sgr','smb','formation'),'—');
     const country=first(val(collection,'cc2','cc','country'),'Land onbekend'),ref=first(val(collection,'reference_no','ref','ref_author'),'Referentie niet beschikbaar');
     node.innerHTML=`<h3>${esc(name)}</h3><div class="meta"><b>${esc(interval)}</b> · ${age===null?'ouderdom onbekend':numFormat(age)+' Ma'}</div><div class="meta">${esc(formation)} · ${esc(country)}</div><div class="meta"><b>${fmt(collectionOccurrences(collection))}</b> fossielen op deze vindplaats</div><div class="meta">${esc(ref)}</div><div class="actions"><button type="button" class="collection-load-occ">Bekijk fossielen</button><button type="button" class="collection-filter-name">Zoek ook op deze gesteentelaag</button></div><div class="collection-occ-list" hidden></div>`;
@@ -1541,7 +1584,7 @@
     const container=$('mapSearchResults');
     const groups=[
       {key:'places',label:'Plaatsen',count:places.length,html:places.slice(0,12).map((place,index)=>`<button class="map-search-result" type="button" data-place-index="${index}"><strong>${esc(place.name)}</strong><span>${esc(place.label)} · ${esc(place.type)}</span></button>`).join('')},
-      {key:'taxa',label:'Soorten en groepen',count:taxa.length,html:taxa.slice(0,12).map((taxon,index)=>`<button class="map-search-result" type="button" data-taxon-search-index="${index}"><strong>${esc(first(val(taxon,'nam','name'),'Onbekende naam'))}</strong><span>${esc(first(val(taxon,'rnk','rank'),'Diergroep'))} · toon vindplaatsen van deze groep</span></button>`).join('')},
+      {key:'taxa',label:'Soorten en groepen',count:taxa.length,html:taxa.slice(0,12).map((taxon,index)=>`<button class="map-search-result" type="button" data-taxon-search-index="${index}"><strong>${esc(first(val(taxon,'nam','name'),'Onbekende naam'))}</strong><span>${esc(rankDutchName(first(val(taxon,'rnk','rank'),'Diergroep')))} · toon vindplaatsen van deze groep</span></button>`).join('')},
       {key:'collections',label:'Vindplaatsen',count:collections.length,html:collections.slice(0,12).map((collection,index)=>{const age=collectionAge(collection),details=[val(collection,'oei'),val(collection,'oli'),age===null?'':numFormat(age)+' Ma',collectionFormation(collection),fmt(collectionOccurrences(collection))+' fossielen'].filter(Boolean).join(' · ');return `<button class="map-search-result" type="button" data-collection-search-index="${index}"><strong>${esc(first(val(collection,'nam','name'),'Vindplaats'))}</strong><span>${esc(details)} · ${esc(first(val(collection,'cc2','cc'),'Land onbekend'))}</span></button>`;}).join('')},
       {key:'occurrences',label:'Fossielvondsten',count:occurrences.length,html:occurrences.slice(0,12).map((record,index)=>{const age=getAge(record),place=getPlace(record);return `<button class="map-search-result" type="button" data-occurrence-search-index="${index}"><strong>${esc(getSoortgroep(record))}</strong><span>Vondstnummer ${esc(val(record,'occurrence_no','occurrence_id','occ_no','id')||'—')} · ${age===null?'leeftijd onbekend':numFormat(age)+' Ma'} · ${esc(place)}</span></button>`;}).join('')}
     ].filter(group=>group.count>0);
@@ -1723,13 +1766,13 @@
   function renderTimeScale(){
     const rows=sortedTimeIntervals();
     const names=[...new Set(rows.map(item=>String(first(val(item,'nam','name'),'')).trim()).filter(Boolean))];
-    $('intervalList').innerHTML=names.map(name=>'<option value="'+esc(name)+'"></option>').join('');
+    $('intervalList').innerHTML=names.map(name=>'<option value="'+esc(intervalDisplayName(name))+'"></option>').join('');
     const quickRows=rows.filter(item=>['eon','era','period'].includes(intervalRank(item)));
     const quickHtml='<button type="button" class="period-chip" data-interval-name=""><span>Alle tijden</span><small>Geen tijdfilter</small></button>'+quickRows.map(item=>{
       const name=first(val(item,'nam','name'),'Onbekend');
       const age=intervalOlderAge(item);
       const colour=first(val(item,'col','color'),'#eaf3f1');
-      return '<button type="button" class="period-chip" data-interval-name="'+esc(name)+'" style="border-left:4px solid '+esc(colour)+'"><span>'+esc(name)+'</span><small>'+ (age===null?'':numFormat(age)+' Ma oud')+'</small></button>';
+      return '<button type="button" class="period-chip" data-interval-name="'+esc(name)+'" style="border-left:4px solid '+esc(colour)+'"><span>'+esc(intervalDisplayName(name))+'</span><small>'+ (age===null?'':numFormat(age)+' miljoen jaar oud')+'</small></button>';
     }).join('');
     $('mapPeriodStrip').innerHTML=quickHtml;
     renderTimeScaleBrowser();
@@ -1741,7 +1784,7 @@
     const rows=allRows.filter(item=>{
       const rank=intervalRank(item);
       const name=String(first(val(item,'nam','name'),''));
-      const matchesQuery=!query||normalizeSearchText(name).includes(query);
+      const matchesQuery=!query||normalizeSearchText(name).includes(query)||normalizeSearchText(intervalDisplayName(name)).includes(query);
       const matchesRank=!selectedRank||(selectedRank==='other'? !['eon','era','period','epoch','age','subepoch','subage','zone','subzone','chron','subchron','bin'].includes(rank):rank===selectedRank);
       return matchesQuery&&matchesRank;
     });
@@ -1756,11 +1799,11 @@
       const older=intervalOlderAge(item),younger=intervalYoungerAge(item);
       const age=older!==null&&younger!==null?numFormat(older)+'–'+numFormat(younger)+' Ma':older!==null?numFormat(older)+' Ma':'Leeftijd onbekend';
       const colour=first(val(item,'col','color'),'#eaf3f1');
-      return '<button type="button" class="time-scale-item" data-interval-name="'+esc(name)+'" style="border-left:4px solid '+esc(colour)+'"><span><strong>'+esc(name)+'</strong><small>'+esc(age)+'</small></span><span class="time-rank">'+esc(intervalRankLabel(rank))+'</span></button>';
+      return '<button type="button" class="time-scale-item" data-interval-name="'+esc(name)+'" style="border-left:4px solid '+esc(colour)+'"><span><strong>'+esc(intervalDisplayName(name))+'</strong><small>'+esc(age.replaceAll(' Ma',' miljoen jaar'))+'</small></span><span class="time-rank">'+esc(intervalRankLabel(rank))+'</span></button>';
     }).join('');
   }
   function chooseTimeInterval(name){
-    $('intervalInput').value=name;
+    $('intervalInput').value=intervalDisplayName(name);
     switchView('map');
     runSearch();
   }
@@ -1769,12 +1812,12 @@
     if(!query.trim())return;soortgroepMessage('Naam zoeken…');$('soortgroepenBrowserResults').innerHTML='';$('soortgroepDetails').innerHTML='<div class="feature-muted">Gegevens over deze soortgroep ophalen…</div>';
     try{const p=new URLSearchParams({name:query.trim(),status:'all',show:'attr,app,size',vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];
       if(!rows.length){soortgroepMessage('Geen soortgroep met deze naam gevonden.',true);return;}soortgroepMessage(fmt(rows.length)+' resultaten · selecteer de juiste naam.');
-      soortgroepBrowserResultRows=rows;$('soortgroepenBrowserResults').innerHTML=rows.slice(0,30).map((item,index)=>`<button class="feature-row" type="button" data-soortgroep-result="${index}"><span><strong>${esc(item.nam||'Onbekend')}</strong><small>${esc(item.rnk||'Soortgroep')} · ${esc(item.oid||'')}</small></span><span>Open →</span></button>`).join('');if(rows.length===1)await loadSoortgroepDetails(rows[0]);
+      soortgroepBrowserResultRows=rows;$('soortgroepenBrowserResults').innerHTML=rows.slice(0,30).map((item,index)=>`<button class="feature-row" type="button" data-soortgroep-result="${index}"><span><strong>${esc(item.nam||'Onbekend')}</strong><small>${esc(rankDutchName(item.rnk||'Soortgroep'))} · ${esc(item.oid||'')}</small></span><span>Open →</span></button>`).join('');if(rows.length===1)await loadSoortgroepDetails(rows[0]);
     }catch(error){soortgroepMessage('Soorten en groepen ophalen mislukt: '+error.message,true);}
   }
   async function loadSoortgroepDetails(soortgroep){
     selectedSoortgroepRecord=soortgroep;
-    $('soortgroepDetails').innerHTML=`<h2 style="font:800 17px Manrope,sans-serif;margin:0 0 6px">${esc(soortgroep.nam||'Soortgroep')}</h2><div class="feature-muted">${esc(soortgroep.rnk||'Soortgroep')} · ${esc(soortgroep.oid||'')}</div><div class="feature-form" style="margin-top:12px"><button class="btn primary" id="applySoortgroepFilter" type="button">Toon op kaart</button><button class="btn" id="loadSoortgroepSynonyms" type="button">Synoniemen</button><button class="btn" id="loadSoortgroepChildren" type="button">Onderliggende groepen</button></div><div id="soortgroepHierarchy" class="feature-muted">Indeling van soortgroepen details ophalen…</div><div id="soortgroepChildren" class="feature-list" style="margin-top:10px"></div>`;
+    $('soortgroepDetails').innerHTML=`<h2 style="font:800 17px Manrope,sans-serif;margin:0 0 6px">${esc(soortgroep.nam||'Soortgroep')}</h2><div class="feature-muted">${esc(rankDutchName(soortgroep.rnk||'Soortgroep'))} · ${esc(soortgroep.oid||'')}</div><div class="feature-form" style="margin-top:12px"><button class="btn primary" id="applySoortgroepFilter" type="button">Toon op kaart</button><button class="btn" id="loadSoortgroepSynonyms" type="button">Synoniemen</button><button class="btn" id="loadSoortgroepChildren" type="button">Onderliggende groepen</button></div><div id="soortgroepHierarchy" class="feature-muted">Indeling van soortgroepen details ophalen…</div><div id="soortgroepChildren" class="feature-list" style="margin-top:10px"></div>`;
     $('applySoortgroepFilter').addEventListener('click',()=>{$('soortgroepInput').value=soortgroep.nam||'';switchView('map');runSearch();});$('loadSoortgroepSynonyms').addEventListener('click',()=>loadSoortgroepRelated(soortgroep,'synonyms'));$('loadSoortgroepChildren').addEventListener('click',()=>loadSoortgroepChildren(soortgroep,0));
     try{
       const p=new URLSearchParams({id:soortgroep.oid,show:'attr,nav,size',vocab:'pbdb'});
@@ -1784,13 +1827,13 @@
       const parents=[];let lastParentId='';
       parentSpecs.forEach(([idKey,soortgroepKey,label])=>{const parent=detail[soortgroepKey],parentId=String(detail[idKey]||'');if(parent&&parentId&&parentId!==String(detail.oid||soortgroep.oid||'')){parents.push({name:parent.nam||label,rank:parent.rnk||label,id:parent.oid||parentId});lastParentId=parentId;}});
       if(detail.prt&&String(detail.par||'')!==lastParentId&&String(detail.par||'')!==String(detail.oid||soortgroep.oid||'')){parents.push({name:detail.prt.nam||'Directe ouder',rank:detail.prt.rnk||'Soortgroep',id:detail.prt.oid||detail.par||''});}
-      const parentHtml=parents.length?parents.map((parent,index)=>`<div class="feature-row"><span><strong>${esc(parent.name)}</strong><small>${esc(parent.rank)} · PBDB ${esc(parent.id)}</small></span><span>${index===parents.length-1?'Directe ouder':''}</span></div>`).join(''):'<div class="feature-muted">PBDB heeft geen bovenliggende soortgroepen voor deze naam teruggegeven.</div>';
+      const parentHtml=parents.length?parents.map((parent,index)=>`<div class="feature-row"><span><strong>${esc(parent.name)}</strong><small>${esc(rankDutchName(parent.rank))} · PBDB ${esc(parent.id)}</small></span><span>${index===parents.length-1?'Directe ouder':''}</span></div>`).join(''):'<div class="feature-muted">PBDB heeft geen bovenliggende soortgroepen voor deze naam teruggegeven.</div>';
       $('soortgroepHierarchy').innerHTML=`<div style="font-weight:700;margin-bottom:6px">Groepen waar deze soort bij hoort</div>${parentHtml}<div class="feature-muted" style="margin-top:8px">Bronvermelding: ${esc(val(detail,'att','author')||'niet beschikbaar')} · PBDB-nummer: ${esc(detail.oid||soortgroep.oid||'—')}</div>`;
     }catch(error){$('soortgroepHierarchy').textContent='Indeling van soortgroepen hiërarchie niet beschikbaar: '+error.message;}
   }
   async function loadSoortgroepRelated(soortgroep,relation){
     const target=$('soortgroepChildren');target.innerHTML='Gegevens ophalen…';
-    try{const p=new URLSearchParams({id:soortgroep.oid,rel:relation,limit:'100',show:'attr',vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];target.innerHTML=rows.length?rows.map(item=>`<div class="feature-row"><span><strong>${esc(item.nam||'')}</strong><small>${esc(item.rnk||'')} · ${esc(item.oid||'')}</small></span></div>`).join(''):'<div class="feature-muted">Geen synoniemen geretourneerd.</div>';}catch(error){target.textContent='Synoniemen niet beschikbaar: '+error.message;}
+    try{const p=new URLSearchParams({id:soortgroep.oid,rel:relation,limit:'100',show:'attr',vocab:'pbdb'});const response=await fetch(API+'/taxa/list.json?'+p.toString(),{headers:{'Accept':'application/json'}});if(!response.ok)throw new Error('HTTP '+response.status);const json=await response.json(),rows=json.records||[];target.innerHTML=rows.length?rows.map(item=>`<div class="feature-row"><span><strong>${esc(item.nam||'')}</strong><small>${esc(rankDutchName(item.rnk||''))} · ${esc(item.oid||'')}</small></span></div>`).join(''):'<div class="feature-muted">Geen synoniemen geretourneerd.</div>';}catch(error){target.textContent='Synoniemen niet beschikbaar: '+error.message;}
   }
   async function loadSoortgroepChildren(soortgroep,offset=0){
     const target=$('soortgroepChildren');
@@ -1802,7 +1845,7 @@
       if(!response.ok)throw new Error('HTTP '+response.status);
       const json=await response.json(),rows=Array.isArray(json.records)?json.records:[];
       soortgroepChildrenResultRows=offset===0?rows:soortgroepChildrenResultRows.concat(rows);
-      target.innerHTML=soortgroepChildrenResultRows.map((item,index)=>`<button class="feature-row" type="button" data-child-index="${index}"><span><strong>${esc(item.nam||'')}</strong><small>${esc(item.rnk||'Soortgroep')} · ${fmt(num(item.siz)||0)} onderliggende groepen</small></span><span>Open →</span></button>`).join('');
+      target.innerHTML=soortgroepChildrenResultRows.map((item,index)=>`<button class="feature-row" type="button" data-child-index="${index}"><span><strong>${esc(item.nam||'')}</strong><small>${esc(rankDutchName(item.rnk||'Soortgroep'))} · ${fmt(num(item.siz)||0)} onderliggende groepen</small></span><span>Open →</span></button>`).join('');
       if(rows.length===100){const more=document.createElement('button');more.type='button';more.className='btn';more.id='moreSoortgroepChildren';more.textContent='Laad volgende 100 subsoortgroepen';more.addEventListener('click',()=>loadSoortgroepChildren(soortgroep,offset+rows.length));target.appendChild(more);}
       if(!soortgroepChildrenResultRows.length)target.innerHTML='<div class="feature-muted">Geen subsoortgroepen gevonden.</div>';
     }catch(error){const more=target.querySelector('#moreSoortgroepChildren');if(more)more.disabled=false;const message=document.createElement('div');message.className='feature-muted';message.textContent='Subsoortgroepen niet beschikbaar: '+error.message;target.appendChild(message);}
